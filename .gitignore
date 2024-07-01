@@ -1,0 +1,11 @@
+.idea/
+bin/
+vendor/
+terraform-provider-volcengine
+.terraform/
+*.tfstate
+*.tfstate.*
+.*hcl
+output_result
+*.log
+go.sum
