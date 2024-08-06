@@ -358,6 +358,11 @@ func ResourceVestackEcsInstance() *schema.Resource {
 				Description: "The ProjectName of the ecs instance.",
 			},
 			"tags": bp.TagsSchema(),
+			"ha_strategy": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Description: "Whether the instance is turned on the high available mode, the value can be `offsite_rebuild` or empty string.",
+			},
 		},
 	}
 	dataSource := DataSourceVestackEcsInstances().Schema["instances"].Elem.(*schema.Resource).Schema
