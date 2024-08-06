@@ -54,4 +54,5 @@ resource "vestack_ecs_instance" "foo" {
     key   = "k1"
     value = "v1"
   }
+  ha_strategy = "offsite_rebuild"
 }
