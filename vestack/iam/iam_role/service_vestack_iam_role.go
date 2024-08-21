@@ -1,6 +1,7 @@
 package iam_role
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -96,6 +97,20 @@ func (s *VestackIamRoleService) WithResourceResponseHandlers(role map[string]int
 	handler := func() (map[string]interface{}, map[string]bp.ResponseConvert, error) {
 		role["Id"] = role["RoleName"]
 		return role, nil, nil
+	}
+
+	logger.Debug(logger.ReqFormat, "role", role)
+	if trustPolicyDocument, ok := role["TrustPolicyDocument"]; ok {
+		// 将 map 类型数据转换为 JSON 字符串
+		trustPolicyDocBytes, err := json.Marshal(trustPolicyDocument)
+		logger.Info(fmt.Sprintf("dataSourceVestackIamRolesRead trust_policy_document:%+v", trustPolicyDocument))
+		if err != nil {
+			logger.Info("error on WithResourceResponseHandlers,marshal failed, %q, %w", role["Id"], err)
+			return nil
+		}
+		trustPolicyDocField := string(trustPolicyDocBytes)
+		// 设置字段值
+		role["TrustPolicyDocument"] = trustPolicyDocField
 	}
 	return []bp.ResourceResponseHandler{handler}
 }

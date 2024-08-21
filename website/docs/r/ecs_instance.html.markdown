@@ -10,7 +10,7 @@ description: |-
 Provides a resource to manage ecs instance
 ## Notice
 When Destroy this resource,If the resource charge type is PrePaid,Please unsubscribe the resource 
-in  [Volcengine Console](https://console.volcengine.com/finance/unsubscribe/),when complete console operation,yon can
+in  [Vestack Console],when complete console operation,yon can
 use 'terraform state rm ${resourceId}' to remove.
 ## Example Usage
 ```hcl
@@ -70,6 +70,7 @@ resource "vestack_ecs_instance" "foo" {
     key   = "k1"
     value = "v1"
   }
+  ha_strategy = "offsite_rebuild"
 }
 ```
 ## Argument Reference
@@ -86,6 +87,7 @@ The following arguments are supported:
 * `data_volumes` - (Optional) The data volumes collection of  ECS instance.
 * `deployment_set_id` - (Optional) The ID of Ecs Deployment Set.
 * `description` - (Optional) The description of ECS instance.
+* `ha_strategy` - (Optional) Whether the instance is turned on the high available mode, the value can be `offsite_rebuild` or empty string.
 * `host_name` - (Optional, ForceNew) The host name of ECS instance.
 * `hpc_cluster_id` - (Optional, ForceNew) The hpc cluster ID of ECS instance.
 * `include_data_volumes` - (Optional) The include data volumes flag of ECS instance.Only effective when change instance charge type.include_data_volumes.
