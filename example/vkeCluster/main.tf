@@ -53,7 +53,7 @@ resource "vestack_vke_cluster" "foo" {
           type = "ESSD_PL0"
         }
         security {
-          security_strategies = []
+          security_strategies = ["Hids"]
           login {
             password = "Um9vdEAxMjM="
           }

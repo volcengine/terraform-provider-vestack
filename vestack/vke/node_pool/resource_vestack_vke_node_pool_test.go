@@ -859,7 +859,7 @@ resource "vestack_vke_node_pool" "foo" {
             login {
                  password = "UHdkMTIzNDU2Nzg="
             }
-			security_strategies = []
+			security_strategies = ["Hids"]
             security_group_ids = ["${vestack_security_group.foo.id}", "${vestack_security_group.foo2.id}"]
         }
 		additional_container_storage_enabled = true
