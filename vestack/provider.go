@@ -61,46 +61,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	ve "github.com/volcengine/terraform-provider-vestack/common"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/anycast_eip/anycast_eip_address"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/anycast_eip/anycast_eip_associate"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/anycast_eip/anycast_pop_location"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/anycast_eip/anycast_server_region"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/autoscaling/scaling_activity"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/autoscaling/scaling_configuration"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/autoscaling/scaling_configuration_attachment"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/autoscaling/scaling_group"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/autoscaling/scaling_group_enabler"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/autoscaling/scaling_instance"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/autoscaling/scaling_instance_attachment"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/autoscaling/scaling_lifecycle_hook"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/autoscaling/scaling_policy"
-	//bioosCluster "github.com/volcengine/terraform-provider-vestack/vestack/bioos/cluster"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/bioos/cluster_bind"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/bioos/workspace"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/cen/cen"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/cen/cen_attach_instance"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/cen/cen_bandwidth_package"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/cen/cen_bandwidth_package_associate"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/cen/cen_grant_instance"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/cen/cen_inter_region_bandwidth"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/cen/cen_route_entry"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/clb/acl"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/clb/acl_entry"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/clb/certificate"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/clb/clb"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/clb/listener"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/clb/rule"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/clb/server_group"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/clb/server_group_server"
-	//clbZone "github.com/volcengine/terraform-provider-vestack/vestack/clb/zone"
-	"github.com/volcengine/terraform-provider-vestack/vestack/cr/cr_authorization_token"
-	"github.com/volcengine/terraform-provider-vestack/vestack/cr/cr_endpoint"
-	"github.com/volcengine/terraform-provider-vestack/vestack/cr/cr_namespace"
-	"github.com/volcengine/terraform-provider-vestack/vestack/cr/cr_registry"
-	"github.com/volcengine/terraform-provider-vestack/vestack/cr/cr_registry_state"
-	"github.com/volcengine/terraform-provider-vestack/vestack/cr/cr_repository"
-	"github.com/volcengine/terraform-provider-vestack/vestack/cr/cr_tag"
-	"github.com/volcengine/terraform-provider-vestack/vestack/cr/cr_vpc_endpoint"
+
 	//"github.com/volcengine/terraform-provider-vestack/vestack/direct_connect/direct_connect_bgp_peer"
 	//"github.com/volcengine/terraform-provider-vestack/vestack/direct_connect/direct_connect_connection"
 	//"github.com/volcengine/terraform-provider-vestack/vestack/direct_connect/direct_connect_gateway"
@@ -117,7 +78,6 @@ import (
 	"github.com/volcengine/terraform-provider-vestack/vestack/ecs/ecs_invocation_result"
 	"github.com/volcengine/terraform-provider-vestack/vestack/ecs/ecs_key_pair"
 	"github.com/volcengine/terraform-provider-vestack/vestack/ecs/ecs_key_pair_associate"
-	"github.com/volcengine/terraform-provider-vestack/vestack/ecs/ecs_launch_template"
 	"github.com/volcengine/terraform-provider-vestack/vestack/ecs/image"
 	"github.com/volcengine/terraform-provider-vestack/vestack/ecs/zone"
 	"github.com/volcengine/terraform-provider-vestack/vestack/eip/eip_address"
@@ -337,12 +297,12 @@ func Provider() terraform.ResourceProvider {
 			"vestack_volumes": volume.DataSourceVestackVolumes(),
 
 			// ================ ECS ================
-			"vestack_ecs_instances":          ecs_instance.DataSourceVestackEcsInstances(),
-			"vestack_images":                 image.DataSourceVestackImages(),
-			"vestack_zones":                  zone.DataSourceVestackZones(),
-			"vestack_ecs_deployment_sets":    ecs_deployment_set.DataSourceVestackEcsDeploymentSets(),
-			"vestack_ecs_key_pairs":          ecs_key_pair.DataSourceVestackEcsKeyPairs(),
-			"vestack_ecs_launch_templates":   ecs_launch_template.DataSourceVestackEcsLaunchTemplates(),
+			"vestack_ecs_instances":       ecs_instance.DataSourceVestackEcsInstances(),
+			"vestack_images":              image.DataSourceVestackImages(),
+			"vestack_zones":               zone.DataSourceVestackZones(),
+			"vestack_ecs_deployment_sets": ecs_deployment_set.DataSourceVestackEcsDeploymentSets(),
+			"vestack_ecs_key_pairs":       ecs_key_pair.DataSourceVestackEcsKeyPairs(),
+			//"vestack_ecs_launch_templates":   ecs_launch_template.DataSourceVestackEcsLaunchTemplates(),
 			"vestack_ecs_commands":           ecs_command.DataSourceVestackEcsCommands(),
 			"vestack_ecs_invocations":        ecs_invocation.DataSourceVestackEcsInvocations(),
 			"vestack_ecs_invocation_results": ecs_invocation_result.DataSourceVestackEcsInvocationResults(),
@@ -420,13 +380,13 @@ func Provider() terraform.ResourceProvider {
 			//"vestack_redis_pitr_time_windows": pitr_time_period.DataSourceVestackRedisPitrTimeWindows(),
 
 			// ================ CR ================
-			"vestack_cr_registries":           cr_registry.DataSourceVestackCrRegistries(),
-			"vestack_cr_namespaces":           cr_namespace.DataSourceVestackCrNamespaces(),
-			"vestack_cr_repositories":         cr_repository.DataSourceVestackCrRepositories(),
-			"vestack_cr_tags":                 cr_tag.DataSourceVestackCrTags(),
-			"vestack_cr_authorization_tokens": cr_authorization_token.DataSourceVestackCrAuthorizationTokens(),
-			"vestack_cr_endpoints":            cr_endpoint.DataSourceVestackCrEndpoints(),
-			"vestack_cr_vpc_endpoints":        cr_vpc_endpoint.DataSourceVestackCrVpcEndpoints(),
+			//"vestack_cr_registries":           cr_registry.DataSourceVestackCrRegistries(),
+			//"vestack_cr_namespaces":           cr_namespace.DataSourceVestackCrNamespaces(),
+			//"vestack_cr_repositories":         cr_repository.DataSourceVestackCrRepositories(),
+			//"vestack_cr_tags":                 cr_tag.DataSourceVestackCrTags(),
+			//"vestack_cr_authorization_tokens": cr_authorization_token.DataSourceVestackCrAuthorizationTokens(),
+			//"vestack_cr_endpoints":            cr_endpoint.DataSourceVestackCrEndpoints(),
+			//"vestack_cr_vpc_endpoints":        cr_vpc_endpoint.DataSourceVestackCrVpcEndpoints(),
 
 			// ================ Shuttle =============================
 			//"vestack_shuttles":                shuttle.DataSourceVestackShuttles(),
@@ -597,9 +557,9 @@ func Provider() terraform.ResourceProvider {
 			"vestack_ecs_deployment_set_associate": ecs_deployment_set_associate.ResourceVestackEcsDeploymentSetAssociate(),
 			"vestack_ecs_key_pair":                 ecs_key_pair.ResourceVestackEcsKeyPair(),
 			"vestack_ecs_key_pair_associate":       ecs_key_pair_associate.ResourceVestackEcsKeyPairAssociate(),
-			"vestack_ecs_launch_template":          ecs_launch_template.ResourceVestackEcsLaunchTemplate(),
-			"vestack_ecs_command":                  ecs_command.ResourceVestackEcsCommand(),
-			"vestack_ecs_invocation":               ecs_invocation.ResourceVestackEcsInvocation(),
+			//"vestack_ecs_launch_template":          ecs_launch_template.ResourceVestackEcsLaunchTemplate(),
+			"vestack_ecs_command":    ecs_command.ResourceVestackEcsCommand(),
+			"vestack_ecs_invocation": ecs_invocation.ResourceVestackEcsInvocation(),
 
 			// ================ NAT ================
 			//"vestack_snat_entry":  snat_entry.ResourceVestackSnatEntry(),
@@ -687,13 +647,13 @@ func Provider() terraform.ResourceProvider {
 			//"vestack_redis_continuous_backup":    redisContinuousBackup.ResourceVestackRedisContinuousBackup(),
 
 			// ================ CR ================
-			"vestack_cr_registry":       cr_registry.ResourceVestackCrRegistry(),
-			"vestack_cr_registry_state": cr_registry_state.ResourceVestackCrRegistryState(),
-			"vestack_cr_namespace":      cr_namespace.ResourceVestackCrNamespace(),
-			"vestack_cr_repository":     cr_repository.ResourceVestackCrRepository(),
-			"vestack_cr_tag":            cr_tag.ResourceVestackCrTag(),
-			"vestack_cr_endpoint":       cr_endpoint.ResourceVestackCrEndpoint(),
-			"vestack_cr_vpc_endpoint":   cr_vpc_endpoint.ResourceVestackCrVpcEndpoint(),
+			//"vestack_cr_registry":       cr_registry.ResourceVestackCrRegistry(),
+			//"vestack_cr_registry_state": cr_registry_state.ResourceVestackCrRegistryState(),
+			//"vestack_cr_namespace":      cr_namespace.ResourceVestackCrNamespace(),
+			//"vestack_cr_repository":     cr_repository.ResourceVestackCrRepository(),
+			//"vestack_cr_tag":            cr_tag.ResourceVestackCrTag(),
+			//"vestack_cr_endpoint":       cr_endpoint.ResourceVestackCrEndpoint(),
+			//"vestack_cr_vpc_endpoint":   cr_vpc_endpoint.ResourceVestackCrVpcEndpoint(),
 
 			// ================ Shuttle ================
 			//"vestack_shuttle":                shuttle.ResourceVestackShuttle(),
