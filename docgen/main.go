@@ -147,6 +147,7 @@ var resourceKeys = map[string]string{
 	//"redis":       "REDIS",
 	//"tls":         "TLS",
 	//"cloudfs":     "CLOUDFS",
+	"direct_connect":     "DIRECT_CONNECT",
 }
 
 type Products struct {
