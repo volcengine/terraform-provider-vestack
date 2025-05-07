@@ -62,11 +62,11 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	ve "github.com/volcengine/terraform-provider-vestack/common"
 
-	//"github.com/volcengine/terraform-provider-vestack/vestack/direct_connect/direct_connect_bgp_peer"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/direct_connect/direct_connect_connection"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/direct_connect/direct_connect_gateway"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/direct_connect/direct_connect_gateway_route"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/direct_connect/direct_connect_virtual_interface"
+	"github.com/volcengine/terraform-provider-vestack/vestack/direct_connect/direct_connect_bgp_peer"
+	"github.com/volcengine/terraform-provider-vestack/vestack/direct_connect/direct_connect_connection"
+	"github.com/volcengine/terraform-provider-vestack/vestack/direct_connect/direct_connect_gateway"
+	"github.com/volcengine/terraform-provider-vestack/vestack/direct_connect/direct_connect_gateway_route"
+	"github.com/volcengine/terraform-provider-vestack/vestack/direct_connect/direct_connect_virtual_interface"
 	"github.com/volcengine/terraform-provider-vestack/vestack/ebs/volume"
 	"github.com/volcengine/terraform-provider-vestack/vestack/ebs/volume_attach"
 	"github.com/volcengine/terraform-provider-vestack/vestack/ecs/ecs_command"
@@ -430,13 +430,13 @@ func Provider() terraform.ResourceProvider {
 			//"vestack_bioos_clusters":   bioosCluster.DataSourceVestackBioosClusters(),
 			//"vestack_bioos_workspaces": workspace.DataSourceVestackBioosWorkspaces(),
 			//
-			//// ================ DirectConnect ================
-			//"vestack_direct_connect_connections":        direct_connect_connection.DataSourceVestackDirectConnectConnections(),
-			//"vestack_direct_connect_gateways":           direct_connect_gateway.DataSourceVestackDirectConnectGateways(),
-			//"vestack_direct_connect_virtual_interfaces": direct_connect_virtual_interface.DataSourceVestackDirectConnectVirtualInterfaces(),
-			//"vestack_direct_connect_bgp_peers":          direct_connect_bgp_peer.DataSourceVestackDirectConnectBgpPeers(),
-			//"vestack_direct_connect_gateway_routes":     direct_connect_gateway_route.DataSourceVestackDirectConnectGatewayRoutes(),
-			//
+			// ================ DirectConnect ================
+			"vestack_direct_connect_connections":        direct_connect_connection.DataSourceVestackDirectConnectConnections(),
+			"vestack_direct_connect_gateways":           direct_connect_gateway.DataSourceVestackDirectConnectGateways(),
+			"vestack_direct_connect_virtual_interfaces": direct_connect_virtual_interface.DataSourceVestackDirectConnectVirtualInterfaces(),
+			"vestack_direct_connect_bgp_peers":          direct_connect_bgp_peer.DataSourceVestackDirectConnectBgpPeers(),
+			"vestack_direct_connect_gateway_routes":     direct_connect_gateway_route.DataSourceVestackDirectConnectGatewayRoutes(),
+			
 			//// ================ TransitRouter =============
 			//"vestack_transit_routers":                         transit_router.DataSourceVestackTransitRouters(),
 			//"vestack_transit_router_vpc_attachments":          transit_router_vpc_attachment.DataSourceVestackTransitRouterVpcAttachments(),
@@ -688,13 +688,13 @@ func Provider() terraform.ResourceProvider {
 			//"vestack_bioos_workspace":    workspace.ResourceVestackBioosWorkspace(),
 			//"vestack_bioos_cluster_bind": cluster_bind.ResourceVestackBioosClusterBind(),
 			//
-			//// ================ Veenedge ================
-			//"vestack_direct_connect_connection":        direct_connect_connection.ResourceVestackDirectConnectConnection(),
-			//"vestack_direct_connect_gateway":           direct_connect_gateway.ResourceVestackDirectConnectGateway(),
-			//"vestack_direct_connect_virtual_interface": direct_connect_virtual_interface.ResourceVestackDirectConnectVirtualInterface(),
-			//"vestack_direct_connect_bgp_peer":          direct_connect_bgp_peer.ResourceVestackDirectConnectBgpPeer(),
-			//"vestack_direct_connect_gateway_route":     direct_connect_gateway_route.ResourceVestackDirectConnectGatewayRoute(),
-			//
+			// ================ DirectConnect ================
+			"vestack_direct_connect_connection":        direct_connect_connection.ResourceVestackDirectConnectConnection(),
+			"vestack_direct_connect_gateway":           direct_connect_gateway.ResourceVestackDirectConnectGateway(),
+			"vestack_direct_connect_virtual_interface": direct_connect_virtual_interface.ResourceVestackDirectConnectVirtualInterface(),
+			"vestack_direct_connect_bgp_peer":          direct_connect_bgp_peer.ResourceVestackDirectConnectBgpPeer(),
+			"vestack_direct_connect_gateway_route":     direct_connect_gateway_route.ResourceVestackDirectConnectGatewayRoute(),
+			
 			//// ================ TransitRouter =============
 			//"vestack_transit_router":                         transit_router.ResourceVestackTransitRouter(),
 			//"vestack_transit_router_vpc_attachment":          transit_router_vpc_attachment.ResourceVestackTransitRouterVpcAttachment(),
