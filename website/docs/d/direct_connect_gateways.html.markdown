@@ -25,7 +25,7 @@ The following arguments are supported:
 
 The `tag_filters` object supports the following:
 
-* `key` - (Optional) The tag key of cloud resource instance.
+* `key` - (Required) The tag key of cloud resource instance.
 * `value` - (Optional) The tag value of cloud resource instance.
 
 ## Attributes Reference

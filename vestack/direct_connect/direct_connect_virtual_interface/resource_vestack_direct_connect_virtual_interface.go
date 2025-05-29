@@ -109,7 +109,7 @@ func ResourceVestackDirectConnectVirtualInterface() *schema.Resource {
 					Schema: map[string]*schema.Schema{
 						"key": {
 							Type:        schema.TypeString,
-							Optional:    true,
+							Required:    true,
 							Description: "The tag key.",
 						},
 						"value": {

@@ -21,11 +21,11 @@ The following arguments are supported:
 * `destination_cidr_block` - (Required, ForceNew) The cidr block.
 * `direct_connect_gateway_id` - (Required, ForceNew) The id of direct connect gateway.
 * `next_hop_id` - (Required, ForceNew) The id of next hop.
-* `account_id` - (Optional, ForceNew) The account id of direct connect gateway routes.
 
 ## Attributes Reference
 In addition to all arguments above, the following attributes are exported:
 * `id` - ID of the resource.
+* `account_id` - The id of account.
 * `creation_time` - The create time.
 * `direct_connect_gateway_route_id` - The id of direct connect gateway route.
 * `next_hop_type` - The type of next hop.
