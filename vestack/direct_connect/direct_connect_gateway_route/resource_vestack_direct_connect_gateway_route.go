@@ -49,12 +49,6 @@ func ResourceVestackDirectConnectGatewayRoute() *schema.Resource {
 				ForceNew:    true,
 				Description: "The id of next hop.",
 			},
-			"account_id": {
-				Type:        schema.TypeString,
-				Optional:    true,
-				ForceNew:    true,
-				Description: "The account id of direct connect gateway routes.",
-			},
 		},
 	}
 	dataSource := DataSourceVestackDirectConnectGatewayRoutes().Schema["direct_connect_gateway_routes"].Elem.(*schema.Resource).Schema

@@ -43,12 +43,6 @@ func ResourceVestackDirectConnectVirtualInterface() *schema.Resource {
 				Optional:    true,
 				Description: "The description of virtual interface.",
 			},
-			"account_id": {
-				Type:        schema.TypeString,
-				Optional:    true,
-				ForceNew:    true,
-				Description: "The account id of direct connect gateway routes.",
-			},
 			"direct_connect_connection_id": {
 				Type:        schema.TypeString,
 				Required:    true,
