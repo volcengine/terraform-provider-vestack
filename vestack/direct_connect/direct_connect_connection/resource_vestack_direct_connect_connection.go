@@ -58,8 +58,8 @@ func ResourceVestackDirectConnectConnection() *schema.Resource {
 			},
 			"owner_project_name": {
 				Type:        schema.TypeString,
-				Optional:    true,
-				Computed:    true,
+				Required:    true,
+				ForceNew:    true,
 				Description: "The direct connect connection owner project name.",
 			},
 			"line_operator": {
