@@ -38,12 +38,6 @@ func ResourceVestackDirectConnectGateway() *schema.Resource {
 				Optional:    true,
 				Description: "The name of direct connect gateway.",
 			},
-			"account_id": {
-				Type:        schema.TypeString,
-				Optional:    true,
-				ForceNew:    true,
-				Description: "The account id of direct connect gateway.",
-			},
 			"description": {
 				Type:        schema.TypeString,
 				Optional:    true,
@@ -57,7 +51,7 @@ func ResourceVestackDirectConnectGateway() *schema.Resource {
 					Schema: map[string]*schema.Schema{
 						"key": {
 							Type:        schema.TypeString,
-							Optional:    true,
+							Required:    true,
 							Description: "The tag key.",
 						},
 						"value": {

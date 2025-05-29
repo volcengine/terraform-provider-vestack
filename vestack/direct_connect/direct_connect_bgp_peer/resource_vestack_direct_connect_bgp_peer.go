@@ -62,12 +62,6 @@ func ResourceVestackDirectConnectBgpPeer() *schema.Resource {
 				ForceNew:    true,
 				Description: "The id of virtual interface.",
 			},
-			"account_id": {
-				Type:        schema.TypeString,
-				Optional:    true,
-				ForceNew:    true,
-				Description: "The account id of direct connect gateway routes.",
-			},
 		},
 	}
 	dataSource := DataSourceVestackDirectConnectBgpPeers().Schema["bgp_peers"].Elem.(*schema.Resource).Schema
