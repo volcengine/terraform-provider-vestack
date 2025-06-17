@@ -9,3 +9,6 @@ terraform-provider-volcengine
 output_result
 *.log
 go.sum
+._*
+*/._*
+*/*/._*

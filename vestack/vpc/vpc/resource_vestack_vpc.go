@@ -68,6 +68,12 @@ func ResourceVestackVpc() *schema.Resource {
 				Computed:    true,
 				Description: "Specifies whether to enable the IPv6 CIDR block of the VPC.",
 			},
+			"ipv6_cidr_block_type": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Computed:    true,
+				Description: "The IPv6 CIDR block type of the VPC..",
+			},
 			"ipv6_cidr_block": {
 				Type:     schema.TypeString,
 				Optional: true,
