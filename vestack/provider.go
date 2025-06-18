@@ -2,6 +2,15 @@ package vestack
 
 import (
 	"github.com/volcengine/terraform-provider-vestack/logger"
+	"github.com/volcengine/terraform-provider-vestack/vestack/clb/acl"
+	"github.com/volcengine/terraform-provider-vestack/vestack/clb/acl_entry"
+	"github.com/volcengine/terraform-provider-vestack/vestack/clb/certificate"
+	"github.com/volcengine/terraform-provider-vestack/vestack/clb/clb"
+	"github.com/volcengine/terraform-provider-vestack/vestack/clb/listener"
+	"github.com/volcengine/terraform-provider-vestack/vestack/clb/rule"
+	"github.com/volcengine/terraform-provider-vestack/vestack/clb/server_group"
+	"github.com/volcengine/terraform-provider-vestack/vestack/clb/server_group_server"
+	clbZone "github.com/volcengine/terraform-provider-vestack/vestack/clb/zone"
 	"github.com/volcengine/terraform-provider-vestack/vestack/tos/bucket_policy"
 	//"github.com/volcengine/terraform-provider-vestack/vestack/cen/cen_service_route_entry"
 	//"github.com/volcengine/terraform-provider-vestack/vestack/cloudfs/cloudfs_access"
@@ -284,14 +293,14 @@ func Provider() terraform.ResourceProvider {
 			//"vestack_anycast_server_regions": anycast_server_region.DataSourceVestackAnyCastServerRegions(),
 
 			// ================ CLB ================
-			//"vestack_acls":                 acl.DataSourceVestackAcls(),
-			//"vestack_clbs":                 clb.DataSourceVestackClbs(),
-			//"vestack_listeners":            listener.DataSourceVestackListeners(),
-			//"vestack_server_groups":        server_group.DataSourceVestackServerGroups(),
-			//"vestack_certificates":         certificate.DataSourceVestackCertificates(),
-			//"vestack_clb_rules":            rule.DataSourceVestackRules(),
-			//"vestack_server_group_servers": server_group_server.DataSourceVestackServerGroupServers(),
-			//"vestack_clb_zones":            clbZone.DataSourceVestackClbZones(),
+			"vestack_acls":                 acl.DataSourceVestackAcls(),
+			"vestack_clbs":                 clb.DataSourceVestackClbs(),
+			"vestack_listeners":            listener.DataSourceVestackListeners(),
+			"vestack_server_groups":        server_group.DataSourceVestackServerGroups(),
+			"vestack_certificates":         certificate.DataSourceVestackCertificates(),
+			"vestack_clb_rules":            rule.DataSourceVestackRules(),
+			"vestack_server_group_servers": server_group_server.DataSourceVestackServerGroupServers(),
+			"vestack_clb_zones":            clbZone.DataSourceVestackClbZones(),
 
 			// ================ EBS ================
 			"vestack_volumes": volume.DataSourceVestackVolumes(),
@@ -436,7 +445,7 @@ func Provider() terraform.ResourceProvider {
 			"vestack_direct_connect_virtual_interfaces": direct_connect_virtual_interface.DataSourceVestackDirectConnectVirtualInterfaces(),
 			"vestack_direct_connect_bgp_peers":          direct_connect_bgp_peer.DataSourceVestackDirectConnectBgpPeers(),
 			"vestack_direct_connect_gateway_routes":     direct_connect_gateway_route.DataSourceVestackDirectConnectGatewayRoutes(),
-			
+
 			//// ================ TransitRouter =============
 			//"vestack_transit_routers":                         transit_router.DataSourceVestackTransitRouters(),
 			//"vestack_transit_router_vpc_attachments":          transit_router_vpc_attachment.DataSourceVestackTransitRouterVpcAttachments(),
@@ -537,14 +546,14 @@ func Provider() terraform.ResourceProvider {
 			//"vestack_anycast_eip_associate": anycast_eip_associate.ResourceVestackAnycastEipAssociate(),
 			//
 			//// ================ CLB ================
-			//"vestack_acl":                 acl.ResourceVestackAcl(),
-			//"vestack_clb":                 clb.ResourceVestackClb(),
-			//"vestack_listener":            listener.ResourceVestackListener(),
-			//"vestack_server_group":        server_group.ResourceVestackServerGroup(),
-			//"vestack_certificate":         certificate.ResourceVestackCertificate(),
-			//"vestack_clb_rule":            rule.ResourceVestackRule(),
-			//"vestack_server_group_server": server_group_server.ResourceVestackServerGroupServer(),
-			//"vestack_acl_entry":           acl_entry.ResourceVestackAclEntry(),
+			"vestack_acl":                 acl.ResourceVestackAcl(),
+			"vestack_clb":                 clb.ResourceVestackClb(),
+			"vestack_listener":            listener.ResourceVestackListener(),
+			"vestack_server_group":        server_group.ResourceVestackServerGroup(),
+			"vestack_certificate":         certificate.ResourceVestackCertificate(),
+			"vestack_clb_rule":            rule.ResourceVestackRule(),
+			"vestack_server_group_server": server_group_server.ResourceVestackServerGroupServer(),
+			"vestack_acl_entry":           acl_entry.ResourceVestackAclEntry(),
 
 			// ================ EBS ================
 			"vestack_volume":        volume.ResourceVestackVolume(),
@@ -694,7 +703,6 @@ func Provider() terraform.ResourceProvider {
 			"vestack_direct_connect_virtual_interface": direct_connect_virtual_interface.ResourceVestackDirectConnectVirtualInterface(),
 			"vestack_direct_connect_bgp_peer":          direct_connect_bgp_peer.ResourceVestackDirectConnectBgpPeer(),
 			"vestack_direct_connect_gateway_route":     direct_connect_gateway_route.ResourceVestackDirectConnectGatewayRoute(),
-			
 			//// ================ TransitRouter =============
 			//"vestack_transit_router":                         transit_router.ResourceVestackTransitRouter(),
 			//"vestack_transit_router_vpc_attachment":          transit_router_vpc_attachment.ResourceVestackTransitRouterVpcAttachment(),
