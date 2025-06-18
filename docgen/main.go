@@ -125,7 +125,7 @@ var deprecatedMapping = map[string]string{
 var resourceKeys = map[string]string{
 	"vpc": "VPC",
 	"ecs": "ECS",
-	//"clb":         "CLB",
+	"clb":         "CLB",
 	"eip": "EIP",
 	"ebs": "EBS",
 	//"nat":         "NAT",
