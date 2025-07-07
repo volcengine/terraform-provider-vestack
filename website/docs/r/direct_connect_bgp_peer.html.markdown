@@ -20,7 +20,6 @@ resource "vestack_direct_connect_bgp_peer" "foo" {
 The following arguments are supported:
 * `remote_asn` - (Required, ForceNew) The remote asn of bgp peer.
 * `virtual_interface_id` - (Required, ForceNew) The id of virtual interface.
-* `account_id` - (Optional, ForceNew) The account id of direct connect gateway routes.
 * `auth_key` - (Optional, ForceNew) The auth key of bgp peer.
 * `bgp_peer_name` - (Optional) The name of bgp peer.
 * `description` - (Optional) The description of bgp peer.
@@ -28,6 +27,7 @@ The following arguments are supported:
 ## Attributes Reference
 In addition to all arguments above, the following attributes are exported:
 * `id` - ID of the resource.
+* `account_id` - The id of account.
 * `bgp_peer_id` - The id of bgp peer.
 * `creation_time` - The create time of bgp peer.
 * `local_asn` - The local asn of bgp peer.
