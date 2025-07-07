@@ -21,14 +21,13 @@ resource "vestack_direct_connect_gateway" "foo" {
 ```
 ## Argument Reference
 The following arguments are supported:
-* `account_id` - (Optional, ForceNew) The account id of direct connect gateway.
 * `description` - (Optional) The description of direct connect gateway.
 * `direct_connect_gateway_name` - (Optional) The name of direct connect gateway.
 * `tags` - (Optional) The direct connect gateway tags.
 
 The `tags` object supports the following:
 
-* `key` - (Optional) The tag key.
+* `key` - (Required) The tag key.
 * `value` - (Optional) The tag value.
 
 ## Attributes Reference

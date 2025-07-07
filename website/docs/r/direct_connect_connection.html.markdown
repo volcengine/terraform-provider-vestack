@@ -36,13 +36,13 @@ The following arguments are supported:
 * `customer_name` - (Required) The dedicated line contact name.
 * `line_operator` - (Required, ForceNew) The physical leased line operator.valid value contains `ChinaTelecom`,`ChinaMobile`,`ChinaUnicom`,`ChinaOther`.
 * `owner_account_id` - (Required, ForceNew) The direct connect connection owner account id.
+* `owner_project_name` - (Required, ForceNew) The direct connect connection owner project name.
 * `peer_location` - (Required, ForceNew) The local IDC address.
 * `port_id` - (Required, ForceNew) The direct connect access point port id.
 * `port_spec` - (Required, ForceNew) The physical leased line port spec.valid value contains `1G`,`10G`.
 * `port_type` - (Required, ForceNew) The physical leased line port type and spec.valid value contains `1000Base-T`,`10GBase-T`,`1000Base`,`10GBase`,`40GBase`,`100GBase`.
 * `description` - (Optional) The description of direct connect.
 * `direct_connect_connection_name` - (Optional) The name of direct connect.
-* `owner_project_name` - (Optional) The direct connect connection owner project name.
 
 ## Attributes Reference
 In addition to all arguments above, the following attributes are exported:

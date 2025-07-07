@@ -33,7 +33,6 @@ The following arguments are supported:
 * `local_ip` - (Required, ForceNew) The local IP that associated with.
 * `peer_ip` - (Required, ForceNew) The peer IP that associated with.
 * `vlan_id` - (Required, ForceNew) The VLAN ID used to connect to the local IDC, please ensure that this VLAN ID is not occupied, the value range: 0 ~ 2999.
-* `account_id` - (Optional, ForceNew) The account id of direct connect gateway routes.
 * `bandwidth` - (Optional) The band width limit of virtual interface,in Mbps.
 * `bfd_detect_interval` - (Optional) The BFD detect interval.
 * `bfd_detect_multiplier` - (Optional) The BFD detect times.

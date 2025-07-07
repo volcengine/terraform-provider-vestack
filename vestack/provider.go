@@ -11,6 +11,9 @@ import (
 	"github.com/volcengine/terraform-provider-vestack/vestack/clb/server_group"
 	"github.com/volcengine/terraform-provider-vestack/vestack/clb/server_group_server"
 	clbZone "github.com/volcengine/terraform-provider-vestack/vestack/clb/zone"
+	"github.com/volcengine/terraform-provider-vestack/vestack/nat/dnat_entry"
+	"github.com/volcengine/terraform-provider-vestack/vestack/nat/nat_gateway"
+	"github.com/volcengine/terraform-provider-vestack/vestack/nat/snat_entry"
 	"github.com/volcengine/terraform-provider-vestack/vestack/tos/bucket_policy"
 	//"github.com/volcengine/terraform-provider-vestack/vestack/cen/cen_service_route_entry"
 	//"github.com/volcengine/terraform-provider-vestack/vestack/cloudfs/cloudfs_access"
@@ -103,50 +106,7 @@ import (
 	"github.com/volcengine/terraform-provider-vestack/vestack/iam/iam_service_linked_role"
 	"github.com/volcengine/terraform-provider-vestack/vestack/iam/iam_user"
 	"github.com/volcengine/terraform-provider-vestack/vestack/iam/iam_user_policy_attachment"
-	//plbAcl "github.com/volcengine/terraform-provider-vestack/vestack/inner/plb/acl"
-	//plbAclEntry "github.com/volcengine/terraform-provider-vestack/vestack/inner/plb/acl_entry"
-	//plbListener "github.com/volcengine/terraform-provider-vestack/vestack/inner/plb/listener"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/inner/plb/plb"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/inner/plb/plb_vpc_associate"
-	//plbServerGroup "github.com/volcengine/terraform-provider-vestack/vestack/inner/plb/server_group"
-	//plbServerGroupServer "github.com/volcengine/terraform-provider-vestack/vestack/inner/plb/server_group_server"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/inner/shuttle/shuttle"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/inner/shuttle/shuttle_client"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/inner/shuttle/shuttle_server"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/inner/shuttle_v1/shuttle_association_v1"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/inner/shuttle_v1/shuttle_client_v1"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/inner/shuttle_v1/shuttle_server_v1"
-	//trEntry "github.com/volcengine/terraform-provider-vestack/vestack/inner/transit_router/route_entry"
-	//trTable "github.com/volcengine/terraform-provider-vestack/vestack/inner/transit_router/route_table"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/inner/transit_router/route_table_association"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/inner/transit_router/route_table_propagation"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/inner/transit_router/transit_router"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/inner/transit_router/transit_router_vpc_attachment"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/inner/transit_router/transit_router_vpn_attachment"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/internet_tunnel/internet_tunnel_address"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/internet_tunnel/internet_tunnel_address_associate"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/internet_tunnel/internet_tunnel_bandwidth"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/internet_tunnel/internet_tunnel_bgp_peer"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/kafka/kafka_consumed_partition"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/kafka/kafka_consumed_topic"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/kafka/kafka_group"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/kafka/kafka_instance"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/kafka/kafka_public_address"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/kafka/kafka_sasl_user"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/kafka/kafka_topic"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/kafka/kafka_topic_partition"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/mongodb/account"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/mongodb/allow_list"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/mongodb/allow_list_associate"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/mongodb/endpoint"
-	//mongodbInstance "github.com/volcengine/terraform-provider-vestack/vestack/mongodb/instance"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/mongodb/instance_parameter"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/mongodb/instance_parameter_log"
-	//mongodbRegion "github.com/volcengine/terraform-provider-vestack/vestack/mongodb/region"
-	//mongodbZone "github.com/volcengine/terraform-provider-vestack/vestack/mongodb/zone"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/nat/dnat_entry"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/nat/nat_gateway"
-	//"github.com/volcengine/terraform-provider-vestack/vestack/nat/snat_entry"
+
 	//"github.com/volcengine/terraform-provider-vestack/vestack/rds/rds_account"
 	//"github.com/volcengine/terraform-provider-vestack/vestack/rds/rds_account_privilege"
 	//"github.com/volcengine/terraform-provider-vestack/vestack/rds/rds_database"
@@ -317,9 +277,9 @@ func Provider() terraform.ResourceProvider {
 			"vestack_ecs_invocation_results": ecs_invocation_result.DataSourceVestackEcsInvocationResults(),
 
 			// ================ NAT ================
-			//"vestack_snat_entries": snat_entry.DataSourceVestackSnatEntries(),
-			//"vestack_nat_gateways": nat_gateway.DataSourceVestackNatGateways(),
-			//"vestack_dnat_entries": dnat_entry.DataSourceVestackDnatEntries(),
+			"vestack_snat_entries": snat_entry.DataSourceVestackSnatEntries(),
+			"vestack_nat_gateways": nat_gateway.DataSourceVestackNatGateways(),
+			"vestack_dnat_entries": dnat_entry.DataSourceVestackDnatEntries(),
 
 			// ================ AutoScaling ================
 			//"vestack_scaling_groups":          scaling_group.DataSourceVestackScalingGroups(),
@@ -571,10 +531,10 @@ func Provider() terraform.ResourceProvider {
 			"vestack_ecs_invocation": ecs_invocation.ResourceVestackEcsInvocation(),
 
 			// ================ NAT ================
-			//"vestack_snat_entry":  snat_entry.ResourceVestackSnatEntry(),
-			//"vestack_nat_gateway": nat_gateway.ResourceVestackNatGateway(),
-			//"vestack_dnat_entry":  dnat_entry.ResourceVestackDnatEntry(),
-			//
+			"vestack_snat_entry":  snat_entry.ResourceVestackSnatEntry(),
+			"vestack_nat_gateway": nat_gateway.ResourceVestackNatGateway(),
+			"vestack_dnat_entry":  dnat_entry.ResourceVestackDnatEntry(),
+
 			//// ================ AutoScaling ================
 			//"vestack_scaling_group":                    scaling_group.ResourceVestackScalingGroup(),
 			//"vestack_scaling_configuration":            scaling_configuration.ResourceVestackScalingConfiguration(),

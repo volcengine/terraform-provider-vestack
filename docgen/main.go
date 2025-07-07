@@ -125,10 +125,10 @@ var deprecatedMapping = map[string]string{
 var resourceKeys = map[string]string{
 	"vpc": "VPC",
 	"ecs": "ECS",
-	"clb":         "CLB",
+	"clb": "CLB",
 	"eip": "EIP",
 	"ebs": "EBS",
-	//"nat":         "NAT",
+	"nat": "NAT",
 	"vke": "VKE",
 	"iam": "IAM",
 	//"escloud":     "ESCLOUD",
@@ -147,7 +147,7 @@ var resourceKeys = map[string]string{
 	//"redis":       "REDIS",
 	//"tls":         "TLS",
 	//"cloudfs":     "CLOUDFS",
-	"direct_connect":     "DIRECT_CONNECT",
+	"direct_connect": "DIRECT_CONNECT",
 }
 
 type Products struct {
