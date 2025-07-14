@@ -2,6 +2,10 @@ package ecs_instance
 
 import (
 	"fmt"
+	"log"
+	"math"
+	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -216,14 +220,14 @@ func ResourceVestackEcsInstance() *schema.Resource {
 
 			"system_volume_type": {
 				Type:        schema.TypeString,
-				Required:    true,
+				Optional:    true,
 				ForceNew:    true,
 				Description: "The type of system volume, the value is `PTSSD` or `ESSD_PL0` or `ESSD_PL1` or `ESSD_PL2` or `ESSD_FlexPL`.",
 			},
 
 			"system_volume_size": {
 				Type:     schema.TypeInt,
-				Required: true,
+				Optional: true,
 				Description: "The size of system volume. " +
 					"The value range of the system volume size is ESSD_PL0: 20~2048, ESSD_FlexPL: 20~2048, PTSSD: 10~500.",
 			},
@@ -362,6 +366,81 @@ func ResourceVestackEcsInstance() *schema.Resource {
 				Type:        schema.TypeString,
 				Optional:    true,
 				Description: "Whether the instance is turned on the high available mode, the value can be `offsite_rebuild` or empty string.",
+			},
+
+			"bms_system_disk_config": {
+				Type:     schema.TypeList,
+				Optional: true,
+				//MaxItems:    1,
+				//MinItems:    1,
+				Description: "For bms only",
+				//Set:         resourceBmsSystemDiskConfigHash,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"capacity_gb": {
+							Type:        schema.TypeInt,
+							Required:    true,
+							Description: "The size of CapacityGB.",
+						},
+						"disk_type": {
+							Type:        schema.TypeString,
+							Required:    true,
+							Description: "The disk type.",
+							DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+								log.Printf("[DEBUG] Comparing disk_type: old=%q, new=%q", old, new)
+								return strings.EqualFold(old, new)
+							},
+						},
+						"partitions": {
+							Type:        schema.TypeSet,
+							Optional:    true,
+							Description: "Partitions configuration for BMS system disk",
+							//Set:         resourceBmsPartitionHash,
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"file_system": {
+										Type:        schema.TypeString,
+										Required:    true,
+										Description: "File system type of the partition.",
+									},
+									"mount_point": {
+										Type:        schema.TypeString,
+										Required:    true,
+										Description: "Mount point of the partition.",
+										DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+											log.Printf("[DEBUG] Comparing mount_point: old=%q, new=%q", old, new)
+											return path.Clean(old) == path.Clean(new)
+										},
+									},
+									"size": {
+										Type:        schema.TypeInt,
+										Optional:    true,
+										Description: "Size of the partition.",
+										DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+											oldVal, _ := strconv.Atoi(old)
+											newVal, _ := strconv.Atoi(new)
+											log.Printf("[DEBUG] Comparing size: old=%d, new=%d, diff=%.2f%%",
+												oldVal, newVal, 100*math.Abs(float64(oldVal-newVal))/float64(oldVal))
+											return math.Abs(float64(oldVal-newVal))/float64(oldVal) < 0.05
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+
+			"bms_clean_data_disk": {
+				Type:        schema.TypeBool,
+				Optional:    true,
+				Description: "Whether clean disk",
+			},
+
+			"bms_delete_mode": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Description: "1.Detach 2. WholeDisksErase 3. SystemDiskErase",
 			},
 		},
 	}

@@ -2,6 +2,7 @@ package ecs_instance
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -504,11 +505,177 @@ func (s *VestackEcsService) CreateResource(resourceData *schema.ResourceData, re
 				"ipv6_addresses": {
 					Ignore: true,
 				},
+				"bms_system_disk_config": {
+					ConvertType: bp.ConvertListUnique,
+					TargetField: "BmsSystemDiskConfig",
+					NextLevelConvert: map[string]bp.RequestConvert{
+						"capacity_gb": {
+							TargetField: "CapacityGB",
+							Convert: func(data *schema.ResourceData, i interface{}) interface{} {
+								if vInt, ok := i.(int); ok {
+									numStr := strconv.Itoa(vInt)
+									num := json.Number(numStr)
+									return &num
+								}
+								return nil
+							},
+						},
+						"disk_type": {
+							TargetField: "DiskType",
+						},
+						//		"partitions": {
+						//			TargetField: "Partitions",
+						//ConvertType: bp.ConvertListN,
+						//StartIndex:  1,
+						//NextLevelConvert: map[string]bp.RequestConvert{
+						//	"file_system": {
+						//		ConvertType: bp.ConvertDefault,
+						//		TargetField: "FileSystem",
+						//	},
+						//	"mount_point": {
+						//		ConvertType: bp.ConvertDefault,
+						//		TargetField: "MountPoint",
+						//	},
+						//	"size": {
+						//		ConvertType: bp.ConvertDefault,
+						//		TargetField: "Size",
+						//	},
+						//},
+						//		},
+					},
+				},
 			},
 			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 				(*call.SdkParam)["ClientToken"] = uuid.New().String()
-				(*call.SdkParam)["Volumes.1.DeleteWithInstance"] = true
+				//(*call.SdkParam)["Volumes.1.DeleteWithInstance"] = true
 				(*call.SdkParam)["Count"] = 1
+
+				// 辅助函数：安全转换为字符串
+				safeString := func(v interface{}) string {
+					if v == nil {
+						return ""
+					}
+					if str, ok := v.(string); ok {
+						return str
+					}
+					return fmt.Sprintf("%v", v)
+				}
+
+				// 辅助函数：安全转换为整数
+				safeInt := func(v interface{}) interface{} {
+					if v == nil {
+						return 0
+					}
+					switch val := v.(type) {
+					case int:
+						return val
+					case int32:
+						return int(val)
+					case int64:
+						return int(val)
+					case float32:
+						return int(val)
+					case float64:
+						return int(val)
+					default:
+						return 0
+					}
+				}
+
+				// 处理 BmsSystemDiskConfig.Partitions
+				if bmsConfigRaw, ok := d.GetOk("bms_system_disk_config"); ok {
+					// 安全转换 bms_system_disk_config 为列表
+					var bmsConfigList []interface{}
+					switch v := bmsConfigRaw.(type) {
+					case *schema.Set:
+						bmsConfigList = v.List()
+						logger.Info("Converted bms_system_disk_config from schema.Set to list")
+					case []interface{}:
+						bmsConfigList = v
+					default:
+						logger.Info(fmt.Sprintf("Unexpected type for bms_system_disk_config: %T", v))
+						return false, fmt.Errorf("invalid type for bms_system_disk_config: %T", v)
+					}
+
+					// 用于跟踪全局分区索引
+					globalPartIndex := 0
+
+					for configIndex, configItem := range bmsConfigList {
+						if config, ok := configItem.(map[string]interface{}); ok {
+							// 处理 partitions 字段
+							if partitionsRaw, ok := config["partitions"]; ok {
+								// 安全转换 partitions 为列表
+								var partitionsList []interface{}
+								switch v := partitionsRaw.(type) {
+								case *schema.Set:
+									partitionsList = v.List()
+									logger.Info(fmt.Sprintf("Converted partitions in config[%d] from schema.Set to list", configIndex))
+								case []interface{}:
+									partitionsList = v
+								default:
+									logger.Info(fmt.Sprintf("Unexpected type for partitions in config[%d]: %T", configIndex, v))
+									return false, fmt.Errorf("invalid type for partitions in config[%d]: %T", configIndex, v)
+								}
+
+								logger.Info(fmt.Sprintf("Processing %d partitions in BmsSystemDiskConfig[%d]",
+									len(partitionsList), configIndex))
+
+								// 展开 partitions 为扁平键值对
+								for partIndex, partItem := range partitionsList {
+									if part, ok := partItem.(map[string]interface{}); ok {
+										// 使用全局分区索引
+										globalPartIndex++
+
+										// 处理 file_system
+										if v, exists := part["file_system"]; exists {
+											key := fmt.Sprintf("BmsSystemDiskConfig.Partitions.%d.FileSystem", globalPartIndex)
+											(*call.SdkParam)[key] = safeString(v)
+											logger.Info(fmt.Sprintf("Added %s: %s", key, safeString(v)))
+										}
+
+										// 处理 mount_point
+										if v, exists := part["mount_point"]; exists {
+											key := fmt.Sprintf("BmsSystemDiskConfig.Partitions.%d.MountPoint", globalPartIndex)
+											(*call.SdkParam)[key] = safeString(v)
+											logger.Info(fmt.Sprintf("Added %s: %s", key, safeString(v)))
+										}
+
+										// 处理 size
+										if v, exists := part["size"]; exists {
+											key := fmt.Sprintf("BmsSystemDiskConfig.Partitions.%d.Size", globalPartIndex)
+											(*call.SdkParam)[key] = safeInt(v)
+											logger.Info(fmt.Sprintf("Added %s: %v", key, safeInt(v)))
+										}
+
+										// 处理其他可能的参数
+										for key, value := range part {
+											switch key {
+											case "file_system", "mount_point", "size":
+												// 已处理的字段，跳过
+											default:
+												// 转换其他字段（根据 SDK 要求调整）
+												sdkKey := fmt.Sprintf("BmsSystemDiskConfig.Partitions.%d.%s", globalPartIndex, key)
+												(*call.SdkParam)[sdkKey] = value
+												logger.Info(fmt.Sprintf("Added extra field %s: %v", sdkKey, value))
+											}
+										}
+									} else {
+										logger.Info(fmt.Sprintf("Invalid partition format at index %d: %+v", partIndex, partItem))
+									}
+								}
+
+								logger.Info(fmt.Sprintf("Processed %d partitions for BmsSystemDiskConfig.%d",
+									len(partitionsList), configIndex))
+							}
+						}
+					}
+				}
+
+				// 新增：检查并移除非扁平化的 BmsSystemDiskConfig.Partitions 参数
+				if _, exists := (*call.SdkParam)["BmsSystemDiskConfig.Partitions"]; exists {
+					delete(*call.SdkParam, "BmsSystemDiskConfig.Partitions")
+					logger.Info("Removed non-flattened BmsSystemDiskConfig.Partitions parameter")
+				}
 
 				if _, ok := (*call.SdkParam)["ZoneId"]; !ok || (*call.SdkParam)["ZoneId"] == "" {
 					var (
@@ -898,7 +1065,7 @@ func (s *VestackEcsService) ModifyResource(resourceData *schema.ResourceData, re
 					},
 					"system_volume_size": {
 						ConvertType: bp.ConvertDefault,
-						ForceGet:    true,
+						// ForceGet:    true,
 					},
 					"key_pair_name": {
 						ConvertType: bp.ConvertDefault,
@@ -915,6 +1082,9 @@ func (s *VestackEcsService) ModifyResource(resourceData *schema.ResourceData, re
 					"keep_image_credential": {
 						ConvertType: bp.ConvertDefault,
 						ForceGet:    true,
+					},
+					"bms_clean_data_disk": {
+						ConvertType: bp.ConvertDefault,
 					},
 				},
 				ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
@@ -981,13 +1151,41 @@ func (s *VestackEcsService) ModifyResource(resourceData *schema.ResourceData, re
 }
 
 func (s *VestackEcsService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []bp.Callback {
+
+	// 1. 打印从 resourceData 中获取的 bms_delete_mode 值
+	bmsMode, ok := resourceData.GetOk("bms_delete_mode")
+	if ok {
+		logger.Info("RemoveResource 收到的 bms_delete_mode:", bmsMode)
+	} else {
+		logger.Info("RemoveResource 未收到 bms_delete_mode")
+	}
+
 	callback := bp.Callback{
 		Call: bp.SdkCall{
-			Action:      "DeleteInstance",
-			ConvertMode: bp.RequestConvertIgnore,
+			Action: "DeleteInstance",
+			//ConvertMode: bp.RequestConvertIgnore,
+			ConvertMode:    bp.RequestConvertAll,
+			RequestIdField: "InstanceId",
 			SdkParam: &map[string]interface{}{
 				"InstanceId": resourceData.Id(),
 			},
+			Convert: map[string]bp.RequestConvert{
+				"bms_delete_mode": {
+					ConvertType: bp.ConvertDefault,
+					TargetField: "BMSDeleteMode",
+				},
+			},
+
+			// 3. 在 Convert 过程中添加日志（如果 Convert 是一个独立函数）
+			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+				logger.Info("BeforeCall 原始参数:", *call.SdkParam)
+				// 手动添加 BmsDeleteMode 参数
+				if bmsMode, ok := d.GetOk("bms_delete_mode"); ok {
+					(*call.SdkParam)["BMSDeleteMode"] = bmsMode
+				}
+				return true, nil
+			},
+
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				//删除ECS
@@ -1083,6 +1281,40 @@ func (s *VestackEcsService) CommonResponseConvert() map[string]bp.ResponseConver
 			Convert: func(i interface{}) interface{} {
 				size, _ := strconv.Atoi(i.(string))
 				return size
+			},
+		},
+		"BmsSystemDiskConfig": {
+			TargetField: "bms_system_disk_config",
+			Convert: func(i interface{}) interface{} {
+				if v, ok := i.([]interface{}); ok {
+					var result []interface{}
+					for _, config := range v {
+						if configMap, ok := config.(map[string]interface{}); ok {
+							item := map[string]interface{}{
+								"capacity_gb": configMap["CapacityGB"],
+								"disk_type":   configMap["DiskType"],
+							}
+							if partitions, exists := configMap["Partitions"]; exists {
+								var partList []interface{}
+								if pList, ok := partitions.([]interface{}); ok {
+									for _, part := range pList {
+										if partMap, ok := part.(map[string]interface{}); ok {
+											partList = append(partList, map[string]interface{}{
+												"file_system": partMap["FileSystem"],
+												"mount_point": partMap["MountPoint"],
+												"size":        partMap["Size"],
+											})
+										}
+									}
+								}
+								item["partitions"] = partList
+							}
+							result = append(result, item)
+						}
+					}
+					return result
+				}
+				return nil
 			},
 		},
 		"UserData": {
