@@ -12,3 +12,7 @@ go.sum
 ._*
 */._*
 */*/._*
+terraform-provider-vestack
+.DS_Store
+*/.DS_Store
+*/*/.DS_Store
