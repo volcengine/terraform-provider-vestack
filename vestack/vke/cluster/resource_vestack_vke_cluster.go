@@ -75,6 +75,12 @@ func ResourceVestackVkeCluster() *schema.Resource {
 				},
 				Description: "The version of Kubernetes specified when creating a VKE cluster (specified to patch version), if not specified, the latest Kubernetes version supported by VKE is used by default, which is a 3-segment version format starting with a lowercase v, that is, KubernetesVersion with IsLatestVersion=True in the return value of ListSupportedVersions.",
 			},
+			"project_name": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Computed:    true,
+				Description: "The project name of the cluster.",
+			},
 			"tags": bp.TagsSchema(),
 			"control_plane_nodes_config": {
 				Type:        schema.TypeList,
@@ -332,8 +338,10 @@ func ResourceVestackVkeCluster() *schema.Resource {
 							Elem: &schema.Schema{
 								Type: schema.TypeString,
 							},
-							Set:         schema.HashString,
-							Description: "The subnet ID for the cluster control plane to communicate within the private network.",
+							Set: schema.HashString,
+							Description: "The subnet ID for the cluster control plane to communicate within the private network.\n" +
+								"Up to 3 subnets can be selected from each available zone, and a maximum of 2 subnets can be added to each available zone.\n" +
+								"Cannot support deleting configured subnets.",
 						},
 						"api_server_public_access_enabled": {
 							Type:        schema.TypeBool,

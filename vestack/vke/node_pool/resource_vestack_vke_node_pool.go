@@ -51,11 +51,32 @@ func ResourceVestackNodePool() *schema.Resource {
 				Description: "The ClientToken of NodePool.",
 			},
 			"tags": bp.TagsSchema(),
-			"auto_scaling": {
-				Type:     schema.TypeList,
-				MaxItems: 1,
+			"instance_ids": {
+				Type:     schema.TypeSet,
 				Optional: true,
-				Computed: true,
+				MaxItems: 100,
+				Set:      schema.HashString,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
+				ConflictsWith: []string{"auto_scaling"},
+				Description: "The list of existing ECS instance ids. Add existing instances with same type of security group under the same cluster VPC to the custom node pool.\n" +
+					"Note that removing instance ids from the list will only remove the nodes from cluster and not release the ECS instances. But deleting node pool will release the ECS instances in it.\n" +
+					"It is not recommended to use this field, it is recommended to use `volcengine_vke_node` resource to add an existing instance to a custom node pool.",
+			},
+			"keep_instance_name": {
+				Type:     schema.TypeBool,
+				Optional: true,
+				Default:  false,
+				Description: "Whether to keep instance name when adding an existing instance to a custom node pool, the value is `true` or `false`.\n" +
+					"This field is valid only when adding new instances to the custom node pool.",
+			},
+			"auto_scaling": {
+				Type:          schema.TypeList,
+				MaxItems:      1,
+				Optional:      true,
+				Computed:      true,
+				ConflictsWith: []string{"instance_ids"},
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
 						"enabled": {
@@ -179,22 +200,19 @@ func ResourceVestackNodePool() *schema.Resource {
 							MaxItems: 1,
 							Optional: true,
 							Computed: true,
-							ForceNew: true,
 							Elem: &schema.Resource{
 								Schema: map[string]*schema.Schema{
 									"type": {
-										Type:         schema.TypeString,
-										Optional:     true,
-										ForceNew:     true,
-										ValidateFunc: validation.StringInSlice([]string{"PTSSD", "ESSD_PL0", "ESSD_FlexPL"}, false),
-										Description:  "The Type of SystemVolume, the value can be `PTSSD` or `ESSD_PL0` or `ESSD_FlexPL`.",
+										Type:        schema.TypeString,
+										Optional:    true,
+										Computed:    true,
+										Description: "The Type of SystemVolume, the value can be `PTSSD` or `ESSD_PL0` or `ESSD_FlexPL`.",
 									},
 									"size": {
-										Type:         schema.TypeInt,
-										Optional:     true,
-										ForceNew:     true,
-										ValidateFunc: validation.IntBetween(20, 2048),
-										Description:  "The Size of SystemVolume, the value range in 20~2048.",
+										Type:        schema.TypeInt,
+										Optional:    true,
+										Computed:    true,
+										Description: "The Size of SystemVolume, the value range in 20~2048.",
 									},
 								},
 							},
@@ -203,27 +221,23 @@ func ResourceVestackNodePool() *schema.Resource {
 						"data_volumes": {
 							Type:     schema.TypeList,
 							Optional: true,
-							ForceNew: true,
 							Elem: &schema.Resource{
 								Schema: map[string]*schema.Schema{
 									"type": {
-										Type:         schema.TypeString,
-										Optional:     true,
-										ForceNew:     true,
-										ValidateFunc: validation.StringInSlice([]string{"PTSSD", "ESSD_PL0", "ESSD_FlexPL"}, false),
-										Description:  "The Type of DataVolumes, the value can be `PTSSD` or `ESSD_PL0` or `ESSD_FlexPL`.",
+										Type:        schema.TypeString,
+										Optional:    true,
+										Default:     "ESSD_PL0",
+										Description: "The Type of DataVolumes, the value can be `PTSSD` or `ESSD_PL0` or `ESSD_FlexPL`. Default value is `ESSD_PL0`.",
 									},
 									"size": {
-										Type:         schema.TypeInt,
-										Optional:     true,
-										ForceNew:     true,
-										ValidateFunc: validation.IntBetween(20, 32768),
-										Description:  "The Size of DataVolumes, the value range in 20~32768.",
+										Type:        schema.TypeInt,
+										Optional:    true,
+										Default:     20,
+										Description: "The Size of DataVolumes, the value range in 20~32768. Default value is `20`.",
 									},
 									"mount_point": {
 										Type:        schema.TypeString,
 										Optional:    true,
-										ForceNew:    true,
 										Description: "The target mount directory of the disk. Must start with `/`.",
 									},
 								},
@@ -238,7 +252,6 @@ func ResourceVestackNodePool() *schema.Resource {
 						"additional_container_storage_enabled": {
 							Type:        schema.TypeBool,
 							Optional:    true,
-							ForceNew:    true,
 							Description: "The AdditionalContainerStorageEnabled of NodeConfig.",
 						},
 						"image_id": {
@@ -312,6 +325,12 @@ func ResourceVestackNodePool() *schema.Resource {
 							},
 							Set: schema.HashString,
 						},
+						"project_name": {
+							Type:        schema.TypeString,
+							Optional:    true,
+							Computed:    true,
+							Description: "The project name of the ecs instance.",
+						},
 					},
 				},
 				Description: "The Config of NodePool.",
@@ -372,9 +391,114 @@ func ResourceVestackNodePool() *schema.Resource {
 							Required:    true,
 							Description: "The Cordon of KubernetesConfig.",
 						},
+						"name_prefix": {
+							Type:        schema.TypeString,
+							Optional:    true,
+							Description: "The NamePrefix of node metadata.",
+						},
+						"auto_sync_disabled": {
+							Type:        schema.TypeBool,
+							Optional:    true,
+							Computed:    true,
+							Description: "Whether to disable the function of automatically synchronizing labels and taints to existing nodes. Default is false.",
+						},
+						"kubelet_config": {
+							Type:        schema.TypeList,
+							MaxItems:    1,
+							Optional:    true,
+							Description: "The KubeletConfig of KubernetesConfig. After adding parameters, deleting parameters does not take effect.",
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"topology_manager_scope": {
+										Type:        schema.TypeString,
+										Optional:    true,
+										Description: "The TopologyManagerScope of KubeletConfig. Valid values: `container`.",
+									},
+									"topology_manager_policy": {
+										Type:        schema.TypeString,
+										Optional:    true,
+										Description: "The TopologyManagerPolicy of KubeletConfig. Valid values: `none`, `restricted`, `best-effort`, `single-numa-node`. Default is `none`.",
+									},
+									"feature_gates": {
+										Type:        schema.TypeList,
+										Optional:    true,
+										MaxItems:    1,
+										Description: "The FeatureGates of KubeletConfig.",
+										Elem: &schema.Resource{
+											Schema: map[string]*schema.Schema{
+												"qos_resource_manager": {
+													Type:        schema.TypeBool,
+													Optional:    true,
+													Description: "Whether to enable QoSResourceManager. Default is false.",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
 					},
 				},
 				Description: "The KubernetesConfig of NodeConfig.",
+			},
+
+			// computed fields
+			"node_statistics": {
+				Type:     schema.TypeList,
+				Computed: true,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"total_count": {
+							Type:        schema.TypeInt,
+							Computed:    true,
+							Description: "The TotalCount of Node.",
+						},
+						"creating_count": {
+							Type:        schema.TypeInt,
+							Computed:    true,
+							Description: "The CreatingCount of Node.",
+						},
+						"running_count": {
+							Type:        schema.TypeInt,
+							Computed:    true,
+							Description: "The RunningCount of Node.",
+						},
+						"updating_count": {
+							Type:        schema.TypeInt,
+							Computed:    true,
+							Description: "The UpdatingCount of Node.",
+						},
+						"deleting_count": {
+							Type:        schema.TypeInt,
+							Computed:    true,
+							Description: "The DeletingCount of Node.",
+						},
+						"failed_count": {
+							Type:        schema.TypeInt,
+							Computed:    true,
+							Description: "The FailedCount of Node.",
+						},
+						"stopped_count": {
+							Type:        schema.TypeInt,
+							Computed:    true,
+							Deprecated:  "This field has been deprecated and is not recommended for use.",
+							Description: "The StoppedCount of Node.",
+						},
+						"stopping_count": {
+							Type:        schema.TypeInt,
+							Computed:    true,
+							Deprecated:  "This field has been deprecated and is not recommended for use.",
+							Description: "The StoppingCount of Node.",
+						},
+						"starting_count": {
+							Type:        schema.TypeInt,
+							Computed:    true,
+							Deprecated:  "This field has been deprecated and is not recommended for use.",
+							Description: "The StartingCount of Node.",
+						},
+					},
+				},
+				Description: "The NodeStatistics of NodeConfig.",
 			},
 		},
 	}
