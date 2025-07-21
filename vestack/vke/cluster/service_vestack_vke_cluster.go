@@ -264,54 +264,54 @@ func (s *VestackVkeClusterService) ReadResource(resourceData *schema.ResourceDat
 	if len(data) == 0 {
 		return data, fmt.Errorf("Vke Cluster %s not exist ", clusterId)
 	}
-
-	// 移除基于API响应设置control_plane_nodes_config的逻辑，保留原有状态值
-	if clusterConfig, ok := data["cluster_config"]; ok {
-		if SubnetIds, ok := clusterConfig.(map[string]interface{})["SubnetIds"]; ok {
-			SubnetIds = SubnetIds.([]interface{})
-		}
-		if apiServerPublicAccessConfig, ok := clusterConfig.(map[string]interface{})["ApiServerPublicAccessConfig"]; ok {
-			if publicAccessNetworkConfig, ok := apiServerPublicAccessConfig.(map[string]interface{})["PublicAccessNetworkConfig"]; ok {
-				apiServerPublicAccessConfig.(map[string]interface{})["PublicAccessNetworkConfig"] = []interface{}{publicAccessNetworkConfig}
-			}
-			clusterConfig.(map[string]interface{})["ApiServerPublicAccessConfig"] = []interface{}{apiServerPublicAccessConfig}
-		}
-	}
-	systemVolume := map[string]interface{}{
-		"Size": resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.system_volume.0.size").(int),
-		"Type": resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.system_volume.0.type").(string),
-	}
-	dataVolumes := map[string]interface{}{
-		"Size":       resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.data_volumes.0.size").(int),
-		"Type":       resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.data_volumes.0.type").(string),
-		"MountPoint": resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.data_volumes.0.mount_point").(string),
-	}
-	login := map[string]interface{}{
-		"Password": resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.security.0.login.0.password").(string),
-	}
-	security := map[string]interface{}{
-		"Login":            []interface{}{login},
-		"SecurityGroupIds": resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.security.0.security_group_ids").(*schema.Set).List(),
-	}
-	NewNodeConfigs := map[string]interface{}{
-		"SubnetIds":        resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.subnet_ids").(*schema.Set).List(),
-		"Count":            resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.count"),
-		"InstanceTypeId":   resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.instance_type_id"),
-		"InitializeScript": resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.initialize_script"),
-		"SystemVolume":     []interface{}{systemVolume},
-		"DataVolumes":      []interface{}{dataVolumes},
-		"Security":         []interface{}{security},
-	}
-	veStack := map[string]interface{}{
-		"DeploySetId":    resourceData.Get("control_plane_nodes_config.0.ve_stack.0.deploy_set_id"),
-		"NewNodeConfigs": []interface{}{NewNodeConfigs},
-	}
-	controlPlaneNodesConfig := map[string]interface{}{
-		"Provider": resourceData.Get("control_plane_nodes_config.0.provider"),
-		"VeStack":  []interface{}{veStack},
-	}
-
-	data["ControlPlaneNodesConfig"] = []interface{}{controlPlaneNodesConfig}
+	//
+	//// 移除基于API响应设置control_plane_nodes_config的逻辑，保留原有状态值
+	//if clusterConfig, ok := data["cluster_config"]; ok {
+	//	if SubnetIds, ok := clusterConfig.(map[string]interface{})["SubnetIds"]; ok {
+	//		SubnetIds = SubnetIds.([]interface{})
+	//	}
+	//	if apiServerPublicAccessConfig, ok := clusterConfig.(map[string]interface{})["ApiServerPublicAccessConfig"]; ok {
+	//		if publicAccessNetworkConfig, ok := apiServerPublicAccessConfig.(map[string]interface{})["PublicAccessNetworkConfig"]; ok {
+	//			apiServerPublicAccessConfig.(map[string]interface{})["PublicAccessNetworkConfig"] = []interface{}{publicAccessNetworkConfig}
+	//		}
+	//		clusterConfig.(map[string]interface{})["ApiServerPublicAccessConfig"] = []interface{}{apiServerPublicAccessConfig}
+	//	}
+	//}
+	//systemVolume := map[string]interface{}{
+	//	"Size": resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.system_volume.0.size").(int),
+	//	"Type": resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.system_volume.0.type").(string),
+	//}
+	//dataVolumes := map[string]interface{}{
+	//	"Size":       resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.data_volumes.0.size").(int),
+	//	"Type":       resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.data_volumes.0.type").(string),
+	//	"MountPoint": resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.data_volumes.0.mount_point").(string),
+	//}
+	//login := map[string]interface{}{
+	//	"Password": resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.security.0.login.0.password").(string),
+	//}
+	//security := map[string]interface{}{
+	//	"Login":            []interface{}{login},
+	//	"SecurityGroupIds": resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.security.0.security_group_ids").(*schema.Set).List(),
+	//}
+	//NewNodeConfigs := map[string]interface{}{
+	//	"SubnetIds":        resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.subnet_ids").(*schema.Set).List(),
+	//	"Count":            resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.count"),
+	//	"InstanceTypeId":   resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.instance_type_id"),
+	//	"InitializeScript": resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.initialize_script"),
+	//	"SystemVolume":     []interface{}{systemVolume},
+	//	"DataVolumes":      []interface{}{dataVolumes},
+	//	"Security":         []interface{}{security},
+	//}
+	//veStack := map[string]interface{}{
+	//	"DeploySetId":    resourceData.Get("control_plane_nodes_config.0.ve_stack.0.deploy_set_id"),
+	//	"NewNodeConfigs": []interface{}{NewNodeConfigs},
+	//}
+	//controlPlaneNodesConfig := map[string]interface{}{
+	//	"Provider": resourceData.Get("control_plane_nodes_config.0.provider"),
+	//	"VeStack":  []interface{}{veStack},
+	//}
+	//
+	//data["ControlPlaneNodesConfig"] = []interface{}{controlPlaneNodesConfig}
 	return data, err
 }
 
@@ -350,6 +350,12 @@ func (s *VestackVkeClusterService) RefreshResourceState(resourceData *schema.Res
 }
 
 func (VestackVkeClusterService) WithResourceResponseHandlers(cluster map[string]interface{}) []bp.ResourceResponseHandler {
+	if controlPlaneNodesConfig, ok := cluster["ControlPlaneNodesConfig"]; ok {
+		if veStack, ok := controlPlaneNodesConfig.(map[string]interface{})["VeStack"]; ok {
+			controlPlaneNodesConfig.(map[string]interface{})["VeStack"] = []interface{}{veStack}
+		}
+	}
+
 	if clusterConfig, ok := cluster["ClusterConfig"]; ok {
 		if SubnetIds, ok := clusterConfig.(map[string]interface{})["SubnetIds"]; ok {
 			SubnetIds = SubnetIds.([]interface{})
@@ -595,57 +601,6 @@ func (s *VestackVkeClusterService) ModifyResource(resourceData *schema.ResourceD
 							NextLevelConvert: map[string]bp.RequestConvert{
 								"public_access_network_config": {
 									ConvertType: bp.ConvertJsonObject,
-								},
-							},
-						},
-					},
-				},
-				"control_plane_nodes_config": {
-					ConvertType: bp.ConvertJsonObject,
-					NextLevelConvert: map[string]bp.RequestConvert{
-						"ve_stack": {
-							ConvertType: bp.ConvertJsonObject,
-							NextLevelConvert: map[string]bp.RequestConvert{
-								"new_node_configs": {
-									ConvertType: bp.ConvertJsonObjectArray,
-									NextLevelConvert: map[string]bp.RequestConvert{
-										"subnet_ids": {
-											ConvertType: bp.ConvertJsonArray,
-										},
-										"system_volume": {
-											ConvertType: bp.ConvertJsonObject,
-										},
-										"data_volumes": {
-											ConvertType: bp.ConvertJsonObjectArray,
-										},
-										"security": {
-											ConvertType: bp.ConvertJsonObject,
-											NextLevelConvert: map[string]bp.RequestConvert{
-												"login": {
-													ConvertType: bp.ConvertJsonObject,
-												},
-											},
-										},
-									},
-								},
-								"existed_node_config": {
-									ConvertType: bp.ConvertJsonObject,
-									NextLevelConvert: map[string]bp.RequestConvert{
-										"instances": {
-											ConvertType: bp.ConvertJsonObject,
-										},
-										"security": {
-											ConvertType: bp.ConvertJsonObject,
-											NextLevelConvert: map[string]bp.RequestConvert{
-												"security_group_ids": {
-													ConvertType: bp.ConvertJsonArray,
-												},
-												"login": {
-													ConvertType: bp.ConvertJsonObject,
-												},
-											},
-										},
-									},
 								},
 							},
 						},
