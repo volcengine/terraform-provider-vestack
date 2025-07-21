@@ -606,6 +606,57 @@ func (s *VestackVkeClusterService) ModifyResource(resourceData *schema.ResourceD
 						},
 					},
 				},
+				"control_plane_nodes_config": {
+					ConvertType: bp.ConvertJsonObject,
+					NextLevelConvert: map[string]bp.RequestConvert{
+						"ve_stack": {
+							ConvertType: bp.ConvertJsonObject,
+							NextLevelConvert: map[string]bp.RequestConvert{
+								"new_node_configs": {
+									ConvertType: bp.ConvertJsonObjectArray,
+									NextLevelConvert: map[string]bp.RequestConvert{
+										"subnet_ids": {
+											ConvertType: bp.ConvertJsonArray,
+										},
+										"system_volume": {
+											ConvertType: bp.ConvertJsonObject,
+										},
+										"data_volumes": {
+											ConvertType: bp.ConvertJsonObjectArray,
+										},
+										"security": {
+											ConvertType: bp.ConvertJsonObject,
+											NextLevelConvert: map[string]bp.RequestConvert{
+												"login": {
+													ConvertType: bp.ConvertJsonObject,
+												},
+											},
+										},
+									},
+								},
+								"existed_node_config": {
+									ConvertType: bp.ConvertJsonObject,
+									NextLevelConvert: map[string]bp.RequestConvert{
+										"instances": {
+											ConvertType: bp.ConvertJsonObject,
+										},
+										"security": {
+											ConvertType: bp.ConvertJsonObject,
+											NextLevelConvert: map[string]bp.RequestConvert{
+												"security_group_ids": {
+													ConvertType: bp.ConvertJsonArray,
+												},
+												"login": {
+													ConvertType: bp.ConvertJsonObject,
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
 				"pods_config": {
 					ConvertType: bp.ConvertJsonObject,
 					NextLevelConvert: map[string]bp.RequestConvert{
