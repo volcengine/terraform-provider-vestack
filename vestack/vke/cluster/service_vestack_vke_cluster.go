@@ -14,6 +14,48 @@ import (
 	"github.com/volcengine/terraform-provider-vestack/vestack/eip/eip_address"
 )
 
+type ControlPlaneNodesConfig struct {
+	Provider string    `json:"Provider"`
+	VeStack  []VeStack `json:"VeStack"`
+}
+
+type ControlPlaneNodesConfigList struct {
+	ControlPlaneNodesConfig []ControlPlaneNodesConfig `json:"ControlPlaneNodesConfig"`
+}
+
+type VeStack struct {
+	NewNodeConfigs []NewNodeConfig `json:"NewNodeConfigs"`
+}
+
+type NewNodeConfig struct {
+	Count          int            `json:"Count"`
+	SubnetIDs      []string       `json:"SubnetIDs"`
+	InstanceTypeID string         `json:"InstanceTypeID"`
+	SystemVolume   []SystemVolume `json:"SystemVolume"`
+	DataVolumes    []DataVolume   `json:"DataVolumes"`
+	Security       []Security     `json:"Security"`
+}
+
+type SystemVolume struct {
+	Size int    `json:"Size"`
+	Type string `json:"Type"`
+}
+
+type DataVolume struct {
+	Size       int    `json:"Size"`
+	Type       string `json:"Type"`
+	MountPoint string `json:"MountPoint"` // 数据盘挂载目录
+}
+
+type Security struct {
+	// SecurityStrategies []string `json:"security_strategies"` // 如果需要可以取消注释
+	Login Login `json:"Login"`
+}
+
+type Login struct {
+	Password string `json:"Password"`
+}
+
 type VestackVkeClusterService struct {
 	Client *bp.SdkClient
 }
@@ -81,6 +123,7 @@ func (s *VestackVkeClusterService) ReadResources(condition map[string]interface{
 		if data, ok = results.([]interface{}); !ok {
 			return data, errors.New("Result.Items is not Slice")
 		}
+		data, err = removeSystemTags(data)
 		return data, err
 	})
 	if err != nil {
@@ -129,9 +172,11 @@ func (s *VestackVkeClusterService) ReadResources(condition map[string]interface{
 					}
 
 					// b. get eip data
-					eipAddressResp, err := s.Client.VpcClient.DescribeEipAddressesCommon(&map[string]interface{}{
+					action := "DescribeEipAddresses"
+					req := map[string]interface{}{
 						"EipAddresses.1": publicIp,
-					})
+					}
+					eipAddressResp, err := s.Client.UniversalClient.DoCall(getVpcUniversalInfo(action), &req)
 					if err != nil {
 						return data, err
 					}
@@ -219,7 +264,54 @@ func (s *VestackVkeClusterService) ReadResource(resourceData *schema.ResourceDat
 	if len(data) == 0 {
 		return data, fmt.Errorf("Vke Cluster %s not exist ", clusterId)
 	}
-
+	//
+	//// 移除基于API响应设置control_plane_nodes_config的逻辑，保留原有状态值
+	//if clusterConfig, ok := data["cluster_config"]; ok {
+	//	if SubnetIds, ok := clusterConfig.(map[string]interface{})["SubnetIds"]; ok {
+	//		SubnetIds = SubnetIds.([]interface{})
+	//	}
+	//	if apiServerPublicAccessConfig, ok := clusterConfig.(map[string]interface{})["ApiServerPublicAccessConfig"]; ok {
+	//		if publicAccessNetworkConfig, ok := apiServerPublicAccessConfig.(map[string]interface{})["PublicAccessNetworkConfig"]; ok {
+	//			apiServerPublicAccessConfig.(map[string]interface{})["PublicAccessNetworkConfig"] = []interface{}{publicAccessNetworkConfig}
+	//		}
+	//		clusterConfig.(map[string]interface{})["ApiServerPublicAccessConfig"] = []interface{}{apiServerPublicAccessConfig}
+	//	}
+	//}
+	//systemVolume := map[string]interface{}{
+	//	"Size": resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.system_volume.0.size").(int),
+	//	"Type": resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.system_volume.0.type").(string),
+	//}
+	//dataVolumes := map[string]interface{}{
+	//	"Size":       resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.data_volumes.0.size").(int),
+	//	"Type":       resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.data_volumes.0.type").(string),
+	//	"MountPoint": resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.data_volumes.0.mount_point").(string),
+	//}
+	//login := map[string]interface{}{
+	//	"Password": resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.security.0.login.0.password").(string),
+	//}
+	//security := map[string]interface{}{
+	//	"Login":            []interface{}{login},
+	//	"SecurityGroupIds": resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.security.0.security_group_ids").(*schema.Set).List(),
+	//}
+	//NewNodeConfigs := map[string]interface{}{
+	//	"SubnetIds":        resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.subnet_ids").(*schema.Set).List(),
+	//	"Count":            resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.count"),
+	//	"InstanceTypeId":   resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.instance_type_id"),
+	//	"InitializeScript": resourceData.Get("control_plane_nodes_config.0.ve_stack.0.new_node_configs.0.initialize_script"),
+	//	"SystemVolume":     []interface{}{systemVolume},
+	//	"DataVolumes":      []interface{}{dataVolumes},
+	//	"Security":         []interface{}{security},
+	//}
+	//veStack := map[string]interface{}{
+	//	"DeploySetId":    resourceData.Get("control_plane_nodes_config.0.ve_stack.0.deploy_set_id"),
+	//	"NewNodeConfigs": []interface{}{NewNodeConfigs},
+	//}
+	//controlPlaneNodesConfig := map[string]interface{}{
+	//	"Provider": resourceData.Get("control_plane_nodes_config.0.provider"),
+	//	"VeStack":  []interface{}{veStack},
+	//}
+	//
+	//data["ControlPlaneNodesConfig"] = []interface{}{controlPlaneNodesConfig}
 	return data, err
 }
 
@@ -258,7 +350,16 @@ func (s *VestackVkeClusterService) RefreshResourceState(resourceData *schema.Res
 }
 
 func (VestackVkeClusterService) WithResourceResponseHandlers(cluster map[string]interface{}) []bp.ResourceResponseHandler {
+	if controlPlaneNodesConfig, ok := cluster["ControlPlaneNodesConfig"]; ok {
+		if veStack, ok := controlPlaneNodesConfig.(map[string]interface{})["VeStack"]; ok {
+			controlPlaneNodesConfig.(map[string]interface{})["VeStack"] = []interface{}{veStack}
+		}
+	}
+
 	if clusterConfig, ok := cluster["ClusterConfig"]; ok {
+		if SubnetIds, ok := clusterConfig.(map[string]interface{})["SubnetIds"]; ok {
+			SubnetIds = SubnetIds.([]interface{})
+		}
 		if apiServerPublicAccessConfig, ok := clusterConfig.(map[string]interface{})["ApiServerPublicAccessConfig"]; ok {
 			if publicAccessNetworkConfig, ok := apiServerPublicAccessConfig.(map[string]interface{})["PublicAccessNetworkConfig"]; ok {
 				apiServerPublicAccessConfig.(map[string]interface{})["PublicAccessNetworkConfig"] = []interface{}{publicAccessNetworkConfig}
@@ -282,12 +383,6 @@ func (VestackVkeClusterService) WithResourceResponseHandlers(cluster map[string]
 				calicoConfig.(map[string]interface{})["BgpConfig"] = []interface{}{bgpConfig}
 			}
 			podsConfig.(map[string]interface{})["CalicoConfig"] = []interface{}{calicoConfig}
-		}
-	}
-
-	if controlPlaneNodesConfig, ok := cluster["ControlPlaneNodesConfig"]; ok {
-		if veStack, ok := controlPlaneNodesConfig.(map[string]interface{})["VeStack"]; ok {
-			controlPlaneNodesConfig.(map[string]interface{})["VeStack"] = []interface{}{veStack}
 		}
 	}
 
@@ -511,6 +606,57 @@ func (s *VestackVkeClusterService) ModifyResource(resourceData *schema.ResourceD
 						},
 					},
 				},
+				"control_plane_nodes_config": {
+					ConvertType: bp.ConvertJsonObject,
+					NextLevelConvert: map[string]bp.RequestConvert{
+						"ve_stack": {
+							ConvertType: bp.ConvertJsonObject,
+							NextLevelConvert: map[string]bp.RequestConvert{
+								"new_node_configs": {
+									ConvertType: bp.ConvertJsonObjectArray,
+									NextLevelConvert: map[string]bp.RequestConvert{
+										"subnet_ids": {
+											ConvertType: bp.ConvertJsonArray,
+										},
+										"system_volume": {
+											ConvertType: bp.ConvertJsonObject,
+										},
+										"data_volumes": {
+											ConvertType: bp.ConvertJsonObjectArray,
+										},
+										"security": {
+											ConvertType: bp.ConvertJsonObject,
+											NextLevelConvert: map[string]bp.RequestConvert{
+												"login": {
+													ConvertType: bp.ConvertJsonObject,
+												},
+											},
+										},
+									},
+								},
+								"existed_node_config": {
+									ConvertType: bp.ConvertJsonObject,
+									NextLevelConvert: map[string]bp.RequestConvert{
+										"instances": {
+											ConvertType: bp.ConvertJsonObject,
+										},
+										"security": {
+											ConvertType: bp.ConvertJsonObject,
+											NextLevelConvert: map[string]bp.RequestConvert{
+												"security_group_ids": {
+													ConvertType: bp.ConvertJsonArray,
+												},
+												"login": {
+													ConvertType: bp.ConvertJsonObject,
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
 				"pods_config": {
 					ConvertType: bp.ConvertJsonObject,
 					NextLevelConvert: map[string]bp.RequestConvert{
@@ -653,7 +799,8 @@ func (s *VestackVkeClusterService) RemoveResource(resourceData *schema.ResourceD
 			ConvertMode: bp.RequestConvertIgnore,
 			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 				(*call.SdkParam)["Id"] = resourceData.Id()
-				(*call.SdkParam)["CascadingDeleteResources"] = []string{"NodePoolResource", "Clb", "Nat"}
+				(*call.SdkParam)["RetainResources"] = []string{}
+				(*call.SdkParam)["CascadingDeleteResources"] = []string{"All"}
 				return true, nil
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
@@ -725,6 +872,9 @@ func (s *VestackVkeClusterService) DatasourceResources(*schema.ResourceData, *sc
 			},
 			"update_client_token": {
 				TargetField: "Filter.UpdateClientToken",
+			},
+			"project_name": {
+				TargetField: "ProjectName",
 			},
 			"tags": {
 				TargetField: "Tags",
@@ -820,12 +970,31 @@ func (s *VestackVkeClusterService) setResourceTags(resourceData *schema.Resource
 	return callbacks
 }
 
+func (s *VestackVkeClusterService) ProjectTrn() *bp.ProjectTrn {
+	return &bp.ProjectTrn{
+		ServiceName:          "vke",
+		ResourceType:         "cluster",
+		ProjectResponseField: "ProjectName",
+		ProjectSchemaField:   "project_name",
+	}
+}
+
 func getUniversalInfo(actionName string) bp.UniversalInfo {
 	return bp.UniversalInfo{
 		ServiceName: "vke",
 		Version:     "2022-05-12",
 		HttpMethod:  bp.POST,
 		ContentType: bp.ApplicationJSON,
+		Action:      actionName,
+	}
+}
+
+func getVpcUniversalInfo(actionName string) bp.UniversalInfo {
+	return bp.UniversalInfo{
+		ServiceName: "vpc",
+		Version:     "2020-04-01",
+		HttpMethod:  bp.GET,
+		ContentType: bp.Default,
 		Action:      actionName,
 	}
 }
@@ -883,4 +1052,25 @@ func ContainsInSlice(items []string, item string) bool {
 		}
 	}
 	return false
+}
+
+func removeSystemTags(data []interface{}) ([]interface{}, error) {
+	var (
+		ok      bool
+		result  map[string]interface{}
+		results []interface{}
+		tags    []interface{}
+	)
+	for _, d := range data {
+		if result, ok = d.(map[string]interface{}); !ok {
+			return results, errors.New("The elements in data are not map ")
+		}
+		tags, ok = result["Tags"].([]interface{})
+		if ok {
+			tags = bp.FilterSystemTags(tags)
+			result["Tags"] = tags
+		}
+		results = append(results, result)
+	}
+	return results, nil
 }

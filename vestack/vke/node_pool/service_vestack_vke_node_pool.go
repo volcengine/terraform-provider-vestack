@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"strconv"
 	"time"
 
@@ -198,6 +199,10 @@ func (s *VestackNodePoolService) ReadResource(resourceData *schema.ResourceData,
 		logger.Debug(logger.RespFormat, "filteredSecurityGroupIds", tmpSecurityGroupIds, filteredSecurityGroupIds)
 	}
 
+	if instanceIds, ok := resourceData.GetOk("instance_ids"); ok {
+		result["InstanceIds"] = instanceIds.(*schema.Set).List()
+	}
+
 	if ecsTags, ok := result["NodeConfig"].(map[string]interface{})["Tags"]; ok {
 		result["NodeConfig"].(map[string]interface{})["EcsTags"] = ecsTags
 		delete(result["NodeConfig"].(map[string]interface{}), "Tags")
@@ -264,13 +269,29 @@ func (VestackNodePoolService) WithResourceResponseHandlers(nodePool map[string]i
 		delete(nodePool, "SystemVolume")
 		nodePool["NodeConfig"].(map[string]interface{})["SystemVolume"] = systemVolume
 
-		return nodePool, nil, nil
+		kubernetesConfig := nodePool["KubernetesConfig"].(map[string]interface{})
+		if kubeletConfig, ok := kubernetesConfig["KubeletConfig"]; ok {
+			if kubeletConfigMap, ok := kubeletConfig.(map[string]interface{}); ok {
+				if featureGates, ok := kubeletConfigMap["FeatureGates"]; ok {
+					kubeletConfigMap["FeatureGates"] = []interface{}{featureGates}
+				}
+				kubernetesConfig["KubeletConfig"] = []interface{}{kubeletConfigMap}
+			}
+		}
+
+		return nodePool, map[string]bp.ResponseConvert{
+			"QoSResourceManager": {
+				TargetField: "qos_resource_manager",
+			},
+		}, nil
 	}
 	return []bp.ResourceResponseHandler{handler}
 
 }
 
 func (s *VestackNodePoolService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
+	var callbacks []bp.Callback
+
 	callback := bp.Callback{
 		Call: bp.SdkCall{
 			Action:      "CreateNodePool",
@@ -285,6 +306,12 @@ func (s *VestackNodePoolService) CreateResource(resourceData *schema.ResourceDat
 				},
 				"name": {
 					TargetField: "Name",
+				},
+				"instance_ids": {
+					Ignore: true,
+				},
+				"keep_instance_name": {
+					Ignore: true,
 				},
 				"node_config": {
 					ConvertType: bp.ConvertJsonObject,
@@ -318,18 +345,10 @@ func (s *VestackNodePoolService) CreateResource(resourceData *schema.ResourceDat
 							},
 						},
 						"system_volume": {
-							ConvertType: bp.ConvertJsonObject,
-							NextLevelConvert: map[string]bp.RequestConvert{
-								"type": {
-									ConvertType: bp.ConvertJsonObject,
-								},
-								"size": {
-									ConvertType: bp.ConvertJsonObject,
-								},
-							},
+							Ignore: true,
 						},
 						"data_volumes": {
-							ConvertType: bp.ConvertJsonObjectArray,
+							Ignore: true,
 						},
 						"initialize_script": {
 							ConvertType: bp.ConvertJsonObject,
@@ -363,6 +382,9 @@ func (s *VestackNodePoolService) CreateResource(resourceData *schema.ResourceDat
 						"hpc_cluster_ids": {
 							ConvertType: bp.ConvertJsonArray,
 						},
+						"project_name": {
+							TargetField: "ProjectName",
+						},
 					},
 				},
 				"kubernetes_config": {
@@ -376,6 +398,27 @@ func (s *VestackNodePoolService) CreateResource(resourceData *schema.ResourceDat
 						},
 						"cordon": {
 							ConvertType: bp.ConvertJsonObject,
+						},
+						"name_prefix": {
+							ConvertType: bp.ConvertJsonObject,
+						},
+						"auto_sync_disabled": {
+							ConvertType: bp.ConvertJsonObject,
+						},
+						"kubelet_config": {
+							ConvertType: bp.ConvertJsonObject,
+							NextLevelConvert: map[string]bp.RequestConvert{
+								"feature_gates": {
+									ConvertType: bp.ConvertJsonObject,
+									NextLevelConvert: map[string]bp.RequestConvert{
+										"qos_resource_manager": {
+											TargetField: "QoSResourceManager",
+											ConvertType: bp.ConvertJsonObject,
+											ForceGet:    true,
+										},
+									},
+								},
+							},
 						},
 					},
 				},
@@ -418,6 +461,37 @@ func (s *VestackNodePoolService) CreateResource(resourceData *schema.ResourceDat
 				return true, nil
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+				// 手动转data_volumes
+				if dataVolumes, ok := d.GetOk("node_config.0.data_volumes"); ok {
+					delete((*call.SdkParam)["NodeConfig"].(map[string]interface{}), "DataVolumes")
+					volumes := make([]interface{}, 0)
+					for index, _ := range dataVolumes.([]interface{}) {
+						volume := make(map[string]interface{})
+						if v, ok := d.GetOkExists(fmt.Sprintf("node_config.0.data_volumes.%d.type", index)); ok {
+							volume["Type"] = v
+						}
+						if v, ok := d.GetOkExists(fmt.Sprintf("node_config.0.data_volumes.%d.size", index)); ok {
+							volume["Size"] = v
+						}
+						if v, ok := d.GetOkExists(fmt.Sprintf("node_config.0.data_volumes.%d.mount_point", index)); ok {
+							volume["MountPoint"] = v
+						}
+						volumes = append(volumes, volume)
+					}
+					(*call.SdkParam)["NodeConfig"].(map[string]interface{})["DataVolumes"] = volumes
+				}
+				// 手动转system_volume
+				if _, ok := d.GetOk("node_config.0.system_volume"); ok {
+					delete((*call.SdkParam)["NodeConfig"].(map[string]interface{}), "SystemVolume")
+					systemVolume := map[string]interface{}{}
+					if v, ok := d.GetOkExists("node_config.0.system_volume.0.type"); ok {
+						systemVolume["Type"] = v
+					}
+					if v, ok := d.GetOkExists("node_config.0.system_volume.0.size"); ok {
+						systemVolume["Size"] = v
+					}
+					(*call.SdkParam)["NodeConfig"].(map[string]interface{})["SystemVolume"] = systemVolume
+				}
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				resp, err := s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 				logger.Debug(logger.RespFormat, call.Action, resp, err)
@@ -434,7 +508,53 @@ func (s *VestackNodePoolService) CreateResource(resourceData *schema.ResourceDat
 			},
 		},
 	}
-	return []bp.Callback{callback}
+	callbacks = append(callbacks, callback)
+
+	// 添加已有实例到自定义节点池
+	nodeCallback := bp.Callback{
+		Call: bp.SdkCall{
+			Action:      "CreateNodes",
+			ConvertMode: bp.RequestConvertInConvert,
+			ContentType: bp.ContentTypeJson,
+			Convert: map[string]bp.RequestConvert{
+				"cluster_id": {
+					TargetField: "ClusterId",
+				},
+				"keep_instance_name": {
+					TargetField: "KeepInstanceName",
+				},
+				"instance_ids": {
+					TargetField: "InstanceIds",
+					ConvertType: bp.ConvertJsonArray,
+				},
+			},
+			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+				if _, ok := d.GetOk("instance_ids"); ok {
+					(*call.SdkParam)["NodePoolId"] = d.Id()
+					(*call.SdkParam)["ClientToken"] = uuid.New().String()
+					return true, nil
+				}
+				return false, nil
+			},
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
+			},
+			//AfterCall: func(d *schema.ResourceData, client *ve.SdkClient, resp *map[string]interface{}, call ve.SdkCall) error {
+			//	tmpIds, _ := ve.ObtainSdkValue("Result.Ids", *resp)
+			//	ids := tmpIds.([]interface{})
+			//	d.Set("node_ids", ids)
+			//	return nil
+			//},
+			Refresh: &bp.StateRefresh{
+				Target:  []string{"Running"},
+				Timeout: resourceData.Timeout(schema.TimeoutCreate),
+			},
+		},
+	}
+	callbacks = append(callbacks, nodeCallback)
+
+	return callbacks
 }
 
 func (s *VestackNodePoolService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
@@ -454,6 +574,12 @@ func (s *VestackNodePoolService) ModifyResource(resourceData *schema.ResourceDat
 				},
 				"name": {
 					TargetField: "Name",
+				},
+				"instance_ids": {
+					Ignore: true,
+				},
+				"keep_instance_name": {
+					Ignore: true,
 				},
 				"node_config": {
 					ConvertType: bp.ConvertJsonObject,
@@ -479,6 +605,9 @@ func (s *VestackNodePoolService) ModifyResource(resourceData *schema.ResourceDat
 									ConvertType: bp.ConvertJsonArray,
 								},
 							},
+						},
+						"additional_container_storage_enabled": {
+							ConvertType: bp.ConvertJsonObject,
 						},
 						"initialize_script": {
 							ConvertType: bp.ConvertJsonObject,
@@ -511,6 +640,9 @@ func (s *VestackNodePoolService) ModifyResource(resourceData *schema.ResourceDat
 						},
 						"image_id": {
 							ConvertType: bp.ConvertJsonObject,
+						},
+						"project_name": {
+							TargetField: "ProjectName",
 						},
 					},
 				},
@@ -620,6 +752,46 @@ func (s *VestackNodePoolService) ModifyResource(resourceData *schema.ResourceDat
 					})
 				}
 
+				// 手动转数据盘
+				if d.HasChange("node_config.0.data_volumes") {
+					if dataVolumes, ok := d.GetOk("node_config.0.data_volumes"); ok {
+						volumes := make([]interface{}, 0)
+						for index, _ := range dataVolumes.([]interface{}) {
+							volume := make(map[string]interface{})
+							if v, ok := d.GetOkExists(fmt.Sprintf("node_config.0.data_volumes.%d.type", index)); ok {
+								volume["Type"] = v
+							}
+							if v, ok := d.GetOkExists(fmt.Sprintf("node_config.0.data_volumes.%d.size", index)); ok {
+								volume["Size"] = v
+							}
+							if v, ok := d.GetOkExists(fmt.Sprintf("node_config.0.data_volumes.%d.mount_point", index)); ok {
+								if v != nil && len(v.(string)) > 0 {
+									volume["MountPoint"] = v
+								}
+							}
+							volumes = append(volumes, volume)
+						}
+						(*call.SdkParam)["NodeConfig"].(map[string]interface{})["DataVolumes"] = volumes
+					} else {
+						// 用户清空数据盘，传空list
+						(*call.SdkParam)["NodeConfig"].(map[string]interface{})["DataVolumes"] = []interface{}{}
+					}
+				}
+
+				if d.HasChange("node_config.0.system_volume") {
+					// 手动转system_volume
+					if _, ok := d.GetOk("node_config.0.system_volume"); ok {
+						systemVolume := map[string]interface{}{}
+						if v, ok := d.GetOkExists("node_config.0.system_volume.0.type"); ok {
+							systemVolume["Type"] = v
+						}
+						if v, ok := d.GetOkExists("node_config.0.system_volume.0.size"); ok {
+							systemVolume["Size"] = v
+						}
+						(*call.SdkParam)["NodeConfig"].(map[string]interface{})["SystemVolume"] = systemVolume
+					}
+				}
+
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
 				resp, err := s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 				logger.Debug(logger.RespFormat, call.Action, resp, err)
@@ -632,6 +804,81 @@ func (s *VestackNodePoolService) ModifyResource(resourceData *schema.ResourceDat
 		},
 	}
 	callbacks = append(callbacks, callback)
+
+	if resourceData.HasChange("auto_scaling") {
+		desiredReplicasCallback := bp.Callback{
+			Call: bp.SdkCall{
+				Action:      "UpdateNodePoolConfig",
+				ConvertMode: bp.RequestConvertInConvert,
+				ContentType: bp.ContentTypeJson,
+				Convert: map[string]bp.RequestConvert{
+					"auto_scaling": {
+						ConvertType: bp.ConvertJsonObject,
+						NextLevelConvert: map[string]bp.RequestConvert{
+							"enabled": {
+								ForceGet:    true,
+								TargetField: "Enabled",
+							},
+							"max_replicas": {
+								ForceGet:    true,
+								TargetField: "MaxReplicas",
+							},
+							"min_replicas": {
+								ForceGet:    true,
+								TargetField: "MinReplicas",
+							},
+							"desired_replicas": {
+								ForceGet:    true,
+								TargetField: "DesiredReplicas",
+							},
+							"priority": {
+								ForceGet:    true,
+								TargetField: "Priority",
+							},
+							"subnet_policy": {
+								ForceGet:    true,
+								TargetField: "SubnetPolicy",
+							},
+						},
+					},
+				},
+				BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+					(*call.SdkParam)["Id"] = d.Id()
+					(*call.SdkParam)["ClusterId"] = d.Get("cluster_id")
+					return true, nil
+				},
+				ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+					logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
+					resp, err := s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
+					logger.Debug(logger.RespFormat, call.Action, resp, err)
+					return resp, err
+				},
+				Refresh: &bp.StateRefresh{
+					Target:  []string{"Running"},
+					Timeout: resourceData.Timeout(schema.TimeoutUpdate),
+				},
+				AfterRefresh: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) error {
+					result, err := s.ReadResource(d, d.Id())
+					if err != nil {
+						return err
+					}
+					nodes, ok := result["NodeStatistics"].(map[string]interface{})
+					if !ok {
+						return fmt.Errorf("NodeStatistics is not map ")
+					}
+					if int(nodes["TotalCount"].(float64)) != d.Get("auto_scaling.0.desired_replicas").(int) {
+						return fmt.Errorf("The number of nodes in node_pool %s is inconsistent. Suggest obtaining more detailed error message through the Volcengine console. ", d.Id())
+					}
+					return nil
+				},
+			},
+		}
+		callbacks = append(callbacks, desiredReplicasCallback)
+	}
+
+	if resourceData.HasChange("instance_ids") {
+		callbacks = s.updateNodes(resourceData, callbacks)
+	}
 
 	// 更新Tags
 	callbacks = s.setResourceTags(resourceData, "NodePool", callbacks)
@@ -648,7 +895,8 @@ func (s *VestackNodePoolService) RemoveResource(resourceData *schema.ResourceDat
 			SdkParam: &map[string]interface{}{
 				"Id":                       resourceData.Id(),
 				"ClusterId":                resourceData.Get("cluster_id"),
-				"CascadingDeleteResources": [1]string{"Ecs"},
+				"RetainResources":          []string{},
+				"CascadingDeleteResources": []string{"Ecs"},
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
@@ -740,6 +988,12 @@ func (s *VestackNodePoolService) DatasourceResources(*schema.ResourceData, *sche
 			"AutoScaling.SubnetPolicy": {
 				TargetField: "subnet_policy",
 			},
+			"KubernetesConfig.NamePrefix": {
+				TargetField: "kube_config_name_prefix",
+			},
+			"KubernetesConfig.AutoSyncDisabled": {
+				TargetField: "kube_config_auto_sync_disabled",
+			},
 			"KubernetesConfig.Cordon": {
 				TargetField: "cordon",
 			},
@@ -770,6 +1024,28 @@ func (s *VestackNodePoolService) DatasourceResources(*schema.ResourceData, *sche
 							label["effect"] = _data.(map[string]interface{})["Effect"].(string)
 							results = append(results, label)
 						}
+					}
+					return results
+				},
+			},
+			"KubernetesConfig.KubeletConfig": {
+				TargetField: "kubelet_config",
+				Convert: func(i interface{}) interface{} {
+					var results []interface{}
+					if _data, ok := i.(map[string]interface{}); ok {
+						label := make(map[string]interface{}, 0)
+						label["topology_manager_scope"] = _data["TopologyManagerScope"]
+						label["topology_manager_policy"] = _data["TopologyManagerPolicy"]
+						if v, exist := _data["FeatureGates"]; exist {
+							if featureGates, ok := v.(map[string]interface{}); ok {
+								if _, exist = featureGates["QoSResourceManager"]; exist {
+									featureGates["qos_resource_manager"] = featureGates["QoSResourceManager"]
+									delete(featureGates, "QoSResourceManager")
+								}
+							}
+						}
+						label["feature_gates"] = []interface{}{_data["FeatureGates"]}
+						results = append(results, label)
 					}
 					return results
 				},
@@ -882,6 +1158,9 @@ func (s *VestackNodePoolService) DatasourceResources(*schema.ResourceData, *sche
 			"NodeConfig.HpcClusterIds": {
 				TargetField: "hpc_cluster_ids",
 			},
+			"NodeConfig.ProjectName": {
+				TargetField: "project_name",
+			},
 			"NodeConfig.Tags": {
 				TargetField: "ecs_tags",
 				Convert: func(i interface{}) interface{} {
@@ -973,6 +1252,124 @@ func (s *VestackNodePoolService) setResourceTags(resourceData *schema.ResourceDa
 	callbacks = append(callbacks, addCallback)
 
 	return callbacks
+}
+
+func (s *VestackNodePoolService) updateNodes(resourceData *schema.ResourceData, callbacks []bp.Callback) []bp.Callback {
+	addedNodes, removedNodes, _, _ := bp.GetSetDifference("instance_ids", resourceData, schema.HashString, false)
+
+	removeCallback := bp.Callback{
+		Call: bp.SdkCall{
+			Action:      "DeleteNodes",
+			ConvertMode: bp.RequestConvertInConvert,
+			ContentType: bp.ContentTypeJson,
+			Convert: map[string]bp.RequestConvert{
+				"cluster_id": {
+					TargetField: "ClusterId",
+					ForceGet:    true,
+				},
+			},
+			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+				if removedNodes != nil && len(removedNodes.List()) > 0 {
+					nodes, err := s.getAllNodeIds(resourceData.Id())
+					if err != nil {
+						return false, err
+					}
+					var removeNodeList []string
+					for _, v := range nodes {
+						nodeMap, ok := v.(map[string]interface{})
+						if !ok {
+							return false, fmt.Errorf("getAllNodeIds Node is not map")
+						}
+						for _, instanceId := range removedNodes.List() {
+							if nodeMap["InstanceId"] == instanceId {
+								removeNodeList = append(removeNodeList, nodeMap["Id"].(string))
+							}
+						}
+					}
+
+					(*call.SdkParam)["NodePoolId"] = resourceData.Id()
+					(*call.SdkParam)["Ids"] = removeNodeList
+					(*call.SdkParam)["RetainResources"] = []string{"Ecs"}
+					return true, nil
+				}
+				return false, nil
+			},
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
+			},
+			Refresh: &bp.StateRefresh{
+				Target:  []string{"Running"},
+				Timeout: resourceData.Timeout(schema.TimeoutUpdate),
+			},
+		},
+	}
+	callbacks = append(callbacks, removeCallback)
+
+	addCallback := bp.Callback{
+		Call: bp.SdkCall{
+			Action:      "CreateNodes",
+			ConvertMode: bp.RequestConvertInConvert,
+			ContentType: bp.ContentTypeJson,
+			Convert: map[string]bp.RequestConvert{
+				"cluster_id": {
+					TargetField: "ClusterId",
+					ForceGet:    true,
+				},
+				"keep_instance_name": {
+					TargetField: "KeepInstanceName",
+					ForceGet:    true,
+				},
+			},
+			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+				if addedNodes != nil && len(addedNodes.List()) > 0 {
+					(*call.SdkParam)["NodePoolId"] = resourceData.Id()
+					(*call.SdkParam)["InstanceIds"] = addedNodes.List()
+					(*call.SdkParam)["ClientToken"] = uuid.New().String()
+					return true, nil
+				}
+				return false, nil
+			},
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
+			},
+			Refresh: &bp.StateRefresh{
+				Target:  []string{"Running"},
+				Timeout: resourceData.Timeout(schema.TimeoutUpdate),
+			},
+		},
+	}
+	callbacks = append(callbacks, addCallback)
+
+	return callbacks
+}
+
+func (s *VestackNodePoolService) getAllNodeIds(nodePoolId string) (nodes []interface{}, err error) {
+	// describe nodes
+	req := map[string]interface{}{
+		"Filter": map[string]interface{}{
+			"NodePoolIds": []string{nodePoolId},
+		},
+	}
+	action := "ListNodes"
+	resp, err := s.Client.UniversalClient.DoCall(getUniversalInfo(action), &req)
+	if err != nil {
+		return nodes, err
+	}
+	logger.Debug(logger.RespFormat, action, req, *resp)
+	results, err := bp.ObtainSdkValue("Result.Items", *resp)
+	if err != nil {
+		return nodes, err
+	}
+	if results == nil {
+		results = []interface{}{}
+	}
+	nodes, ok := results.([]interface{})
+	if !ok {
+		return nodes, errors.New("Result.Items is not Slice")
+	}
+	return nodes, nil
 }
 
 func getUniversalInfo(actionName string) bp.UniversalInfo {

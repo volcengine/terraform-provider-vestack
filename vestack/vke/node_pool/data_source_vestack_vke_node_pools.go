@@ -283,16 +283,19 @@ func DataSourceVestackNodePools() *schema.Resource {
 									"stopped_count": {
 										Type:        schema.TypeInt,
 										Computed:    true,
+										Deprecated:  "This field has been deprecated and is not recommended for use.",
 										Description: "The StoppedCount of Node.",
 									},
 									"stopping_count": {
 										Type:        schema.TypeInt,
 										Computed:    true,
+										Deprecated:  "This field has been deprecated and is not recommended for use.",
 										Description: "The StoppingCount of Node.",
 									},
 									"starting_count": {
 										Type:        schema.TypeInt,
 										Computed:    true,
+										Deprecated:  "This field has been deprecated and is not recommended for use.",
 										Description: "The StartingCount of Node.",
 									},
 								},
@@ -303,6 +306,49 @@ func DataSourceVestackNodePools() *schema.Resource {
 							Type:        schema.TypeBool,
 							Computed:    true,
 							Description: "The Cordon of KubernetesConfig.",
+						},
+						"kube_config_name_prefix": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "The NamePrefix of node metadata.",
+						},
+						"kube_config_auto_sync_disabled": {
+							Type:        schema.TypeBool,
+							Computed:    true,
+							Description: "Whether to disable the function of automatically synchronizing labels and taints to existing nodes.",
+						},
+						"kubelet_config": {
+							Type:        schema.TypeList,
+							Computed:    true,
+							Description: "The KubeletConfig of KubernetesConfig.",
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"topology_manager_scope": {
+										Type:        schema.TypeString,
+										Computed:    true,
+										Description: "The TopologyManagerScope of KubeletConfig.",
+									},
+									"topology_manager_policy": {
+										Type:        schema.TypeString,
+										Computed:    true,
+										Description: "The TopologyManagerPolicy of KubeletConfig.",
+									},
+									"feature_gates": {
+										Type:        schema.TypeList,
+										Computed:    true,
+										Description: "The FeatureGates of KubeletConfig.",
+										Elem: &schema.Resource{
+											Schema: map[string]*schema.Schema{
+												"qos_resource_manager": {
+													Type:        schema.TypeBool,
+													Computed:    true,
+													Description: "Whether to enable QoSResourceManager.",
+												},
+											},
+										},
+									},
+								},
+							},
 						},
 						"label_content": {
 							Type:        schema.TypeList,
@@ -408,6 +454,11 @@ func DataSourceVestackNodePools() *schema.Resource {
 							Type:        schema.TypeString,
 							Computed:    true,
 							Description: "The NamePrefix of NodeConfig.",
+						},
+						"project_name": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "The project name of NodeConfig.",
 						},
 						"hpc_cluster_ids": {
 							Type:        schema.TypeSet,
