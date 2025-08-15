@@ -15,6 +15,7 @@ import (
 	"github.com/volcengine/terraform-provider-vestack/vestack/nat/nat_gateway"
 	"github.com/volcengine/terraform-provider-vestack/vestack/nat/snat_entry"
 	"github.com/volcengine/terraform-provider-vestack/vestack/tos/bucket_policy"
+
 	//"github.com/volcengine/terraform-provider-vestack/vestack/cen/cen_service_route_entry"
 	//"github.com/volcengine/terraform-provider-vestack/vestack/cloudfs/cloudfs_access"
 	//"github.com/volcengine/terraform-provider-vestack/vestack/cloudfs/cloudfs_file_system"
@@ -94,6 +95,7 @@ import (
 	"github.com/volcengine/terraform-provider-vestack/vestack/ecs/zone"
 	"github.com/volcengine/terraform-provider-vestack/vestack/eip/eip_address"
 	"github.com/volcengine/terraform-provider-vestack/vestack/eip/eip_associate"
+
 	//"github.com/volcengine/terraform-provider-vestack/vestack/escloud/instance"
 	//"github.com/volcengine/terraform-provider-vestack/vestack/escloud/region"
 	//esZone "github.com/volcengine/terraform-provider-vestack/vestack/escloud/zone"
@@ -137,6 +139,7 @@ import (
 
 	"github.com/volcengine/terraform-provider-vestack/vestack/tos/bucket"
 	"github.com/volcengine/terraform-provider-vestack/vestack/tos/object"
+
 	//"github.com/volcengine/terraform-provider-vestack/vestack/veenedge/available_resource"
 	//"github.com/volcengine/terraform-provider-vestack/vestack/veenedge/cloud_server"
 	//veInstance "github.com/volcengine/terraform-provider-vestack/vestack/veenedge/instance"
@@ -163,6 +166,10 @@ import (
 	"github.com/volcengine/terraform-provider-vestack/vestack/vpc/security_group"
 	"github.com/volcengine/terraform-provider-vestack/vestack/vpc/security_group_rule"
 	"github.com/volcengine/terraform-provider-vestack/vestack/vpc/subnet"
+	"github.com/volcengine/terraform-provider-vestack/vestack/vpc/traffic_mirror_filter"
+	"github.com/volcengine/terraform-provider-vestack/vestack/vpc/traffic_mirror_filter_rule"
+	"github.com/volcengine/terraform-provider-vestack/vestack/vpc/traffic_mirror_session"
+	"github.com/volcengine/terraform-provider-vestack/vestack/vpc/traffic_mirror_target"
 	"github.com/volcengine/terraform-provider-vestack/vestack/vpc/vpc"
 	//"github.com/volcengine/terraform-provider-vestack/vestack/vpn/customer_gateway"
 	//"github.com/volcengine/terraform-provider-vestack/vestack/vpn/vpn_connection"
@@ -246,6 +253,12 @@ func Provider() terraform.ResourceProvider {
 
 			// ================ EIP ================
 			"vestack_eip_addresses": eip_address.DataSourceVestackEipAddresses(),
+
+			// ================ TRAFFIC MIRROR ==============
+			"vestack_traffic_mirror_filters":      traffic_mirror_filter.DataSourceVestackTrafficMirrorFilters(),
+			"vestack_traffic_mirror_filter_rules": traffic_mirror_filter_rule.DataSourceVestackTrafficMirrorFilterRules(),
+			"vestack_traffic_mirror_sessions":     traffic_mirror_session.DataSourceVestackTrafficMirrorSessions(),
+			"vestack_traffic_mirror_targets":      traffic_mirror_target.DataSourceVestackTrafficMirrorTargets(),
 
 			// ================ AnyCast Eip ================
 			//"vestack_anycast_eip_addresses":  anycast_eip_address.DataSourceVestackAnyCastEipAddresses(),
@@ -500,6 +513,12 @@ func Provider() terraform.ResourceProvider {
 			// ================ EIP ================
 			"vestack_eip_address":   eip_address.ResourceVestackEipAddress(),
 			"vestack_eip_associate": eip_associate.ResourceVestackEipAssociate(),
+
+			// ================ TRAFFIC MIRROR ==============
+			"vestack_traffic_mirror_filter":      traffic_mirror_filter.ResourceVestackTrafficMirrorFilter(),
+			"vestack_traffic_mirror_filter_rule": traffic_mirror_filter_rule.ResourceVestackTrafficMirrorFilterRule(),
+			"vestack_traffic_mirror_session":     traffic_mirror_session.ResourceVestackTrafficMirrorSession(),
+			"vestack_traffic_mirror_target":      traffic_mirror_target.ResourceVestackTrafficMirrorTarget(),
 
 			// ================ AnyCast Eip ================
 			//"vestack_anycast_eip_address":   anycast_eip_address.ResourceVestackAnyCastEipAddress(),
