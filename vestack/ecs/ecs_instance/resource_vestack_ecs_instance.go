@@ -365,6 +365,7 @@ func ResourceVestackEcsInstance() *schema.Resource {
 			"ha_strategy": {
 				Type:        schema.TypeString,
 				Optional:    true,
+				Computed:    true,
 				Description: "Whether the instance is turned on the high available mode, the value can be `offsite_rebuild` or empty string.",
 			},
 
