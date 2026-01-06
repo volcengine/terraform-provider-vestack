@@ -810,6 +810,9 @@ func (s *VestackEcsService) ModifyResource(resourceData *schema.ResourceData, re
 				"description": {
 					ConvertType: bp.ConvertDefault,
 				},
+				"ha_strategy": {
+					ConvertType: bp.ConvertDefault,
+				},
 			},
 			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 				//if image changed ,password change in replaceSystemVolume,not here
