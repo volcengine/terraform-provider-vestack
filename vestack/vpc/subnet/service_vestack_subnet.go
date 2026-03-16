@@ -36,16 +36,15 @@ func (s *VestackSubnetService) ReadResources(m map[string]interface{}) (data []i
 		ok      bool
 	)
 	return bp.WithPageNumberQuery(m, "PageSize", "PageNumber", 20, 1, func(condition map[string]interface{}) ([]interface{}, error) {
-		vpcClient := s.Client.VpcClient
 		action := "DescribeSubnets"
 		logger.Debug(logger.ReqFormat, action, condition)
 		if condition == nil {
-			resp, err = vpcClient.DescribeSubnetsCommon(nil)
+			resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), nil)
 			if err != nil {
 				return data, err
 			}
 		} else {
-			resp, err = vpcClient.DescribeSubnetsCommon(&condition)
+			resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), &condition)
 			if err != nil {
 				return data, err
 			}
@@ -107,10 +106,21 @@ func (s *VestackSubnetService) RefreshResourceState(resourceData *schema.Resourc
 				failStates []string
 			)
 			failStates = append(failStates, "Error")
-			demo, err = s.ReadResource(resourceData, id)
-			if err != nil {
+
+			if err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+				demo, err = s.ReadResource(resourceData, id)
+				if err != nil {
+					if bp.ResourceNotFoundError(err) {
+						return resource.RetryableError(err)
+					} else {
+						return resource.NonRetryableError(err)
+					}
+				}
+				return nil
+			}); err != nil {
 				return nil, "", err
 			}
+
 			status, err = bp.ObtainSdkValue("Status", demo)
 			if err != nil {
 				return nil, "", err
@@ -171,6 +181,10 @@ func (s *VestackSubnetService) CreateResource(resourceData *schema.ResourceData,
 				"ipv6_cidr_block": {
 					Ignore: true,
 				},
+				"tags": {
+					TargetField: "Tags",
+					ConvertType: bp.ConvertListN,
+				},
 			},
 			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 				ipv6CidrBlock, exists := d.GetOkExists("ipv6_cidr_block")
@@ -182,7 +196,7 @@ func (s *VestackSubnetService) CreateResource(resourceData *schema.ResourceData,
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
-				resp, err := s.Client.VpcClient.CreateSubnetCommon(call.SdkParam)
+				resp, err := s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 				logger.Debug(logger.RespFormat, call.Action, resp, err)
 				return resp, err
 			},
@@ -208,6 +222,8 @@ func (s *VestackSubnetService) CreateResource(resourceData *schema.ResourceData,
 }
 
 func (s *VestackSubnetService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
+	var callbacks []bp.Callback
+
 	callback := bp.Callback{
 		Call: bp.SdkCall{
 			Action:      "ModifySubnetAttributes",
@@ -230,11 +246,12 @@ func (s *VestackSubnetService) ModifyResource(resourceData *schema.ResourceData,
 					}
 				}
 
+				delete(*call.SdkParam, "Tags")
 				return true, nil
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
-				return s.Client.VpcClient.ModifySubnetAttributesCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
 			Refresh: &bp.StateRefresh{
 				Target:  []string{"Available"},
@@ -242,7 +259,13 @@ func (s *VestackSubnetService) ModifyResource(resourceData *schema.ResourceData,
 			},
 		},
 	}
-	return []bp.Callback{callback}
+	callbacks = append(callbacks, callback)
+
+	// 更新Tags
+	setResourceTagsCallbacks := bp.SetResourceTags(s.Client, "TagResources", "UntagResources", "subnet", resourceData, getUniversalInfo)
+	callbacks = append(callbacks, setResourceTagsCallbacks...)
+
+	return callbacks
 }
 
 func (s *VestackSubnetService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []bp.Callback {
@@ -259,7 +282,7 @@ func (s *VestackSubnetService) RemoveResource(resourceData *schema.ResourceData,
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
-				return s.Client.VpcClient.DeleteSubnetCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
 			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 				return bp.CheckResourceUtilRemoved(d, s.ReadResource, 3*time.Minute)
@@ -294,6 +317,15 @@ func (s *VestackSubnetService) DatasourceResources(*schema.ResourceData, *schema
 				TargetField: "SubnetIds",
 				ConvertType: bp.ConvertWithN,
 			},
+			"tags": {
+				TargetField: "TagFilters",
+				ConvertType: bp.ConvertListN,
+				NextLevelConvert: map[string]bp.RequestConvert{
+					"value": {
+						TargetField: "Values.1",
+					},
+				},
+			},
 		},
 		NameField:    "SubnetName",
 		IdField:      "SubnetId",
@@ -314,4 +346,13 @@ func (s *VestackSubnetService) DatasourceResources(*schema.ResourceData, *schema
 
 func (s *VestackSubnetService) ReadResourceId(id string) string {
 	return id
+}
+
+func getUniversalInfo(actionName string) bp.UniversalInfo {
+	return bp.UniversalInfo{
+		ServiceName: "vpc",
+		Version:     "2020-04-01",
+		HttpMethod:  bp.GET,
+		Action:      actionName,
+	}
 }

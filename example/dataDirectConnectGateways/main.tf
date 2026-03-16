@@ -1,3 +1,3 @@
-data "vestack_direct_connect_gateways" "foo"{
-     direct_connect_gateway_name="tf-test"
+data "vestack_direct_connect_gateways" "foo" {
+  direct_connect_gateway_name = "tf-test"
 }

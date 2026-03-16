@@ -35,16 +35,15 @@ func (s *VestackRouteTableAssociateService) ReadResources(m map[string]interface
 		ok      bool
 	)
 	return bp.WithPageNumberQuery(m, "PageSize", "PageNumber", 20, 1, func(condition map[string]interface{}) ([]interface{}, error) {
-		vpcClient := s.Client.VpcClient
 		action := "DescribeRouteTableList"
 		logger.Debug(logger.ReqFormat, action, condition)
 		if condition == nil {
-			resp, err = vpcClient.DescribeRouteTableListCommon(nil)
+			resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), nil)
 			if err != nil {
 				return data, err
 			}
 		} else {
-			resp, err = vpcClient.DescribeRouteTableListCommon(&condition)
+			resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), &condition)
 			if err != nil {
 				return data, err
 			}
@@ -178,7 +177,7 @@ func (s *VestackRouteTableAssociateService) CreateResource(resourceData *schema.
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
-				return s.Client.VpcClient.AssociateRouteTableCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
 			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 				d.SetId(fmt.Sprint((*call.SdkParam)["RouteTableId"], ":", (*call.SdkParam)["SubnetId"]))
@@ -232,7 +231,7 @@ func (s *VestackRouteTableAssociateService) RemoveResource(resourceData *schema.
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
-				return s.Client.VpcClient.DisassociateRouteTableCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
 			Refresh: &bp.StateRefresh{
 				Target:  []string{"Available"},
@@ -263,4 +262,14 @@ func (s *VestackRouteTableAssociateService) DatasourceResources(*schema.Resource
 
 func (s *VestackRouteTableAssociateService) ReadResourceId(id string) string {
 	return id
+}
+
+func getUniversalInfo(actionName string) bp.UniversalInfo {
+	return bp.UniversalInfo{
+		ServiceName: "vpc",
+		Version:     "2020-04-01",
+		HttpMethod:  bp.GET,
+		ContentType: bp.Default,
+		Action:      actionName,
+	}
 }

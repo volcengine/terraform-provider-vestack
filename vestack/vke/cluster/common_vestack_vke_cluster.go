@@ -46,10 +46,7 @@ func FlannelFieldDiffSuppress(k, old, new string, d *schema.ResourceData) bool {
 
 func VpcCniConfigFieldDiffSuppress(k, old, new string, d *schema.ResourceData) bool {
 	podNetworkMode := d.Get("pods_config").([]interface{})[0].(map[string]interface{})["pod_network_mode"].(string)
-	if podNetworkMode == "VpcCniHybrid" || podNetworkMode == "VpcCniShared" {
-		return false
-	}
-	return true
+	return podNetworkMode != "VpcCniShared"
 }
 
 var (

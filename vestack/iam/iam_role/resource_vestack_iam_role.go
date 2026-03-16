@@ -20,6 +20,7 @@ $ terraform import vestack_iam_role.default TerraformTestRole
 */
 
 func ResourceVestackIamRole() *schema.Resource {
+	tagsSchema := bp.TagsSchema()
 	return &schema.Resource{
 		Create: resourceVestackIamRoleCreate,
 		Read:   resourceVestackIamRoleRead,
@@ -36,18 +37,21 @@ func ResourceVestackIamRole() *schema.Resource {
 		Schema: map[string]*schema.Schema{
 			"trust_policy_document": {
 				Type:        schema.TypeString,
-				Required:    true,
+				Optional:    true,
 				Description: "The trust policy document of the Role.",
 				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
-					oldMap := make(map[string]interface{})
-					newMap := make(map[string]interface{})
+					if d.Id() != "" {
+						oldMap := make(map[string]interface{})
+						newMap := make(map[string]interface{})
 
-					_ = json.Unmarshal([]byte(old), &oldMap)
-					_ = json.Unmarshal([]byte(new), &newMap)
+						_ = json.Unmarshal([]byte(old), &oldMap)
+						_ = json.Unmarshal([]byte(new), &newMap)
 
-					oldStr, _ := json.MarshalIndent(oldMap, "", "\t")
-					newStr, _ := json.MarshalIndent(newMap, "", "\t")
-					return string(oldStr) == string(newStr)
+						oldStr, _ := json.MarshalIndent(oldMap, "", "\t")
+						newStr, _ := json.MarshalIndent(newMap, "", "\t")
+						return string(oldStr) == string(newStr)
+					}
+					return false
 				},
 			},
 			"role_name": {
@@ -58,7 +62,7 @@ func ResourceVestackIamRole() *schema.Resource {
 			},
 			"display_name": {
 				Type:        schema.TypeString,
-				Required:    true,
+				Optional:    true,
 				Description: "The display name of the Role.",
 			},
 			"description": {
@@ -76,6 +80,17 @@ func ResourceVestackIamRole() *schema.Resource {
 				Computed:    true,
 				Description: "The resource name of the Role.",
 			},
+			"role_id": {
+				Type:        schema.TypeInt,
+				Computed:    true,
+				Description: "The id of the Role.",
+			},
+			"is_service_linked_role": {
+				Type:        schema.TypeInt,
+				Computed:    true,
+				Description: "Whether the Role is a service linked role.",
+			},
+			"tags": tagsSchema,
 		},
 	}
 }

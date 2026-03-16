@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 /*
@@ -141,7 +141,7 @@ func ResourceVestackDirectConnectVirtualInterface() *schema.Resource {
 }
 
 func resourceVestackDirectConnectVirtualInterfaceCreate(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewDirectConnectVirtualInterfaceService(meta.(*ve.SdkClient))
+	service := NewDirectConnectVirtualInterfaceService(meta.(*bp.SdkClient))
 	err = service.Dispatcher.Create(service, d, ResourceVestackDirectConnectVirtualInterface())
 	if err != nil {
 		return fmt.Errorf("error on creating direct_connect_virtual_interface %q, %s", d.Id(), err)
@@ -150,7 +150,7 @@ func resourceVestackDirectConnectVirtualInterfaceCreate(d *schema.ResourceData, 
 }
 
 func resourceVestackDirectConnectVirtualInterfaceRead(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewDirectConnectVirtualInterfaceService(meta.(*ve.SdkClient))
+	service := NewDirectConnectVirtualInterfaceService(meta.(*bp.SdkClient))
 	err = service.Dispatcher.Read(service, d, ResourceVestackDirectConnectVirtualInterface())
 	if err != nil {
 		return fmt.Errorf("error on reading direct_connect_virtual_interface %q, %s", d.Id(), err)
@@ -159,7 +159,7 @@ func resourceVestackDirectConnectVirtualInterfaceRead(d *schema.ResourceData, me
 }
 
 func resourceVestackDirectConnectVirtualInterfaceUpdate(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewDirectConnectVirtualInterfaceService(meta.(*ve.SdkClient))
+	service := NewDirectConnectVirtualInterfaceService(meta.(*bp.SdkClient))
 	err = service.Dispatcher.Update(service, d, ResourceVestackDirectConnectVirtualInterface())
 	if err != nil {
 		return fmt.Errorf("error on updating direct_connect_virtual_interface %q, %s", d.Id(), err)
@@ -168,7 +168,7 @@ func resourceVestackDirectConnectVirtualInterfaceUpdate(d *schema.ResourceData, 
 }
 
 func resourceVestackDirectConnectVirtualInterfaceDelete(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewDirectConnectVirtualInterfaceService(meta.(*ve.SdkClient))
+	service := NewDirectConnectVirtualInterfaceService(meta.(*bp.SdkClient))
 	err = service.Dispatcher.Delete(service, d, ResourceVestackDirectConnectVirtualInterface())
 	if err != nil {
 		return fmt.Errorf("error on deleting direct_connect_virtual_interface %q, %s", d.Id(), err)

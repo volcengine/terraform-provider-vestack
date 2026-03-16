@@ -32,7 +32,7 @@ func EcsInstanceImportDiffSuppress(k, old, new string, d *schema.ResourceData) b
 	}
 
 	//在计费方式没有发生变化的时候 period的变化会被忽略
-	if !d.HasChange("instance_charge_type") && (k == "period" || k == "include_data_volumes") {
+	if !d.HasChange("instance_charge_type") && (k == "include_data_volumes") {
 		return true
 	}
 
@@ -45,10 +45,18 @@ func EcsInstanceImportDiffSuppress(k, old, new string, d *schema.ResourceData) b
 
 func AutoRenewDiffSuppress(k, old, new string, d *schema.ResourceData) bool {
 	// 仅当创建 PrePaid 实例时有效
-	if d.Id() == "" && d.Get("instance_charge_type").(string) == "PrePaid" {
-		return false
+	//if d.Id() == "" && d.Get("instance_charge_type").(string) == "PrePaid" {
+	//	return false
+	//}
+	//return true
+	// 仅当创建 PrePaid 实例或 PostPaid 转为 PrePaid 实例时有效
+	if !d.HasChange("instance_charge_type") {
+		return true
 	}
-	return true
+	if d.Get("instance_charge_type").(string) == "PostPaid" {
+		return true
+	}
+	return false
 }
 
 func UserDateImportDiffSuppress(k, old, new string, d *schema.ResourceData) bool {

@@ -6,7 +6,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 /*
@@ -64,7 +64,7 @@ func ResourceVestackDnatEntry() *schema.Resource {
 				Type:         schema.TypeString,
 				Required:     true,
 				ValidateFunc: validation.StringInSlice([]string{"tcp", "udp"}, false),
-				Description:  "The network protocol.",
+				Description:  "The network protocol. Valid values: `tcp`, `udp`.",
 			},
 			"dnat_entry_name": {
 				Type:        schema.TypeString,
@@ -81,8 +81,8 @@ func ResourceVestackDnatEntry() *schema.Resource {
 }
 
 func resourceVestackDnatEntryCreate(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewDnatEntryService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Create(service, d, ResourceVestackDnatEntry())
+	service := NewDnatEntryService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Create(service, d, ResourceVestackDnatEntry())
 	if err != nil {
 		return fmt.Errorf("error on creating dnat entry: %q, %w", d.Id(), err)
 	}
@@ -90,8 +90,8 @@ func resourceVestackDnatEntryCreate(d *schema.ResourceData, meta interface{}) (e
 }
 
 func resourceVestackDnatEntryRead(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewDnatEntryService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Read(service, d, ResourceVestackDnatEntry())
+	service := NewDnatEntryService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Read(service, d, ResourceVestackDnatEntry())
 	if err != nil {
 		return fmt.Errorf("error on reading dnat entry: %q, %w", d.Id(), err)
 	}
@@ -99,8 +99,8 @@ func resourceVestackDnatEntryRead(d *schema.ResourceData, meta interface{}) (err
 }
 
 func resourceVestackDnatEntryUpdate(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewDnatEntryService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Update(service, d, ResourceVestackDnatEntry())
+	service := NewDnatEntryService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Update(service, d, ResourceVestackDnatEntry())
 	if err != nil {
 		return fmt.Errorf("error on updating dnat entry: %q, %w", d.Id(), err)
 	}
@@ -108,8 +108,8 @@ func resourceVestackDnatEntryUpdate(d *schema.ResourceData, meta interface{}) (e
 }
 
 func resourceVestackDnatEntryDelete(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewDnatEntryService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Delete(service, d, ResourceVestackDnatEntry())
+	service := NewDnatEntryService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Delete(service, d, ResourceVestackDnatEntry())
 	if err != nil {
 		return fmt.Errorf("error on deleting dnat entry: %q, %w", d.Id(), err)
 	}

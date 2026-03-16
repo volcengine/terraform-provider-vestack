@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 /*
@@ -44,23 +44,11 @@ func ResourceVestackDirectConnectConnection() *schema.Resource {
 				Optional:    true,
 				Description: "The description of direct connect.",
 			},
-			"port_id": {
+			"direct_connect_access_point_id": {
 				Type:        schema.TypeString,
 				Required:    true,
 				ForceNew:    true,
-				Description: "The direct connect access point port id.",
-			},
-			"owner_account_id": {
-				Type:        schema.TypeString,
-				Required:    true,
-				ForceNew:    true,
-				Description: "The direct connect connection owner account id.",
-			},
-			"owner_project_name": {
-				Type:        schema.TypeString,
-				Required:    true,
-				ForceNew:    true,
-				Description: "The direct connect connection owner project name.",
+				Description: "The direct connect access point id.",
 			},
 			"line_operator": {
 				Type:        schema.TypeString,
@@ -107,13 +95,32 @@ func ResourceVestackDirectConnectConnection() *schema.Resource {
 				Required:    true,
 				Description: "The dedicated line contact email.",
 			},
+			"tags": {
+				Type:        schema.TypeList,
+				Optional:    true,
+				Description: "The physical leased line tags.",
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"key": {
+							Type:        schema.TypeString,
+							Optional:    true,
+							Description: "The tag key.",
+						},
+						"value": {
+							Type:        schema.TypeString,
+							Optional:    true,
+							Description: "The tag value.",
+						},
+					},
+				},
+			},
 		},
 	}
 	return resource
 }
 
 func resourceVestackDirectConnectConnectionCreate(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewDirectConnectConnectionService(meta.(*ve.SdkClient))
+	service := NewDirectConnectConnectionService(meta.(*bp.SdkClient))
 	err = service.Dispatcher.Create(service, d, ResourceVestackDirectConnectConnection())
 	if err != nil {
 		return fmt.Errorf("error on creating direct_connect_connection %q, %s", d.Id(), err)
@@ -122,7 +129,7 @@ func resourceVestackDirectConnectConnectionCreate(d *schema.ResourceData, meta i
 }
 
 func resourceVestackDirectConnectConnectionRead(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewDirectConnectConnectionService(meta.(*ve.SdkClient))
+	service := NewDirectConnectConnectionService(meta.(*bp.SdkClient))
 	err = service.Dispatcher.Read(service, d, ResourceVestackDirectConnectConnection())
 	if err != nil {
 		return fmt.Errorf("error on reading direct_connect_connection %q, %s", d.Id(), err)
@@ -131,7 +138,7 @@ func resourceVestackDirectConnectConnectionRead(d *schema.ResourceData, meta int
 }
 
 func resourceVestackDirectConnectConnectionUpdate(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewDirectConnectConnectionService(meta.(*ve.SdkClient))
+	service := NewDirectConnectConnectionService(meta.(*bp.SdkClient))
 	err = service.Dispatcher.Update(service, d, ResourceVestackDirectConnectConnection())
 	if err != nil {
 		return fmt.Errorf("error on updating direct_connect_connection %q, %s", d.Id(), err)
@@ -140,7 +147,7 @@ func resourceVestackDirectConnectConnectionUpdate(d *schema.ResourceData, meta i
 }
 
 func resourceVestackDirectConnectConnectionDelete(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewDirectConnectConnectionService(meta.(*ve.SdkClient))
+	service := NewDirectConnectConnectionService(meta.(*bp.SdkClient))
 	err = service.Dispatcher.Delete(service, d, ResourceVestackDirectConnectConnection())
 	if err != nil {
 		return fmt.Errorf("error on deleting direct_connect_connection %q, %s", d.Id(), err)

@@ -95,6 +95,7 @@ func ResourceVestackSubnet() *schema.Resource {
 				},
 				Description: "The last eight bits of the IPv6 CIDR block of the Subnet. Valid values: 0 - 255.",
 			},
+			"tags": bp.TagsSchema(),
 			"creation_time": {
 				Type:        schema.TypeString,
 				Computed:    true,

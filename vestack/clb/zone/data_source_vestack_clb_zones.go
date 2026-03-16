@@ -2,7 +2,7 @@ package zone
 
 import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 func DataSourceVestackClbZones() *schema.Resource {
@@ -52,6 +52,6 @@ func DataSourceVestackClbZones() *schema.Resource {
 }
 
 func dataSourceVestackClbZonesRead(d *schema.ResourceData, meta interface{}) error {
-	service := NewClbZoneService(meta.(*ve.SdkClient))
-	return ve.DefaultDispatcher().Data(service, d, DataSourceVestackClbZones())
+	service := NewClbZoneService(meta.(*bp.SdkClient))
+	return bp.DefaultDispatcher().Data(service, d, DataSourceVestackClbZones())
 }

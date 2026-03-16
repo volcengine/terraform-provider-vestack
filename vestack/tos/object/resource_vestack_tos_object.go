@@ -1,10 +1,12 @@
 package object
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/hashcode"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	bp "github.com/volcengine/terraform-provider-vestack/common"
@@ -63,9 +65,10 @@ func ResourceVestackTosObject() *schema.Resource {
 			},
 			"file_path": {
 				Type:     schema.TypeString,
-				Required: true,
+				Optional: true,
 				//ForceNew:    true,
-				Description: "The file path for upload.",
+				Description:  "The file path for upload. Only one of `file_path,content` can be specified.",
+				ExactlyOneOf: []string{"file_path", "content"},
 			},
 			"content_md5": {
 				Type:        schema.TypeString,
@@ -97,9 +100,10 @@ func ResourceVestackTosObject() *schema.Resource {
 					"public-read-write",
 					"authenticated-read",
 					"bucket-owner-read",
+					"default",
 				}, false),
 				Default:     "private",
-				Description: "The public acl control of object.Valid value is private|public-read|public-read-write|authenticated-read|bucket-owner-read.",
+				Description: "The public acl control of object. Valid value is private|public-read|public-read-write|authenticated-read|bucket-owner-read|default. `default` means to enable the default inheritance bucket ACL function for the object.",
 			},
 			"storage_class": {
 				Type:     schema.TypeString,
@@ -120,6 +124,12 @@ func ResourceVestackTosObject() *schema.Resource {
 				},
 				Set:         schema.HashString,
 				Description: "The version ids of the object if exist.",
+			},
+			"is_default": {
+				Type: schema.TypeBool,
+				//Optional:    true,
+				Computed:    true,
+				Description: "Whether to enable the default inheritance bucket ACL function for the object.",
 			},
 			"account_acl": {
 				Type:        schema.TypeSet,
@@ -163,9 +173,31 @@ func ResourceVestackTosObject() *schema.Resource {
 				Description: "The flag of enable tos version.",
 			},
 			"content": {
-				Type:        schema.TypeString,
-				Computed:    true,
-				Description: "The content the TOS Object when content type is json or text and xml.",
+				Type:         schema.TypeString,
+				Optional:     true,
+				Computed:     true,
+				ExactlyOneOf: []string{"file_path", "content"},
+				Description:  "The content of the TOS Object when content type is json or text and xml. Only one of `file_path,content` can be specified.",
+			},
+			"tags": {
+				Type:        schema.TypeSet,
+				Optional:    true,
+				Description: "Tos Bucket Tags.",
+				Set:         TagsHash,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"key": {
+							Type:        schema.TypeString,
+							Required:    true,
+							Description: "The Key of Tags.",
+						},
+						"value": {
+							Type:        schema.TypeString,
+							Required:    true,
+							Description: "The Value of Tags.",
+						},
+					},
+				},
 			},
 		},
 	}
@@ -206,4 +238,16 @@ func resourceVestackTosObjectDelete(d *schema.ResourceData, meta interface{}) (e
 		return fmt.Errorf("error on deleting tos object %q, %s", d.Id(), err)
 	}
 	return err
+}
+
+var TagsHash = func(v interface{}) int {
+	if v == nil {
+		return hashcode.String("")
+	}
+	m := v.(map[string]interface{})
+	var (
+		buf bytes.Buffer
+	)
+	buf.WriteString(fmt.Sprintf("%v#%v", m["key"], m["value"]))
+	return hashcode.String(buf.String())
 }

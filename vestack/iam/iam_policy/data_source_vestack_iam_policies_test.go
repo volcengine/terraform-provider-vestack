@@ -44,6 +44,7 @@ func TestAccVestackIamPoliciesDatasource_Basic(t *testing.T) {
 				Config: testAccVestackIamPoliciesDatasourceConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(acc.ResourceId, "policies.#", "2"),
+					resource.TestCheckResourceAttrSet(acc.ResourceId, "policies.0.update_date"),
 				),
 			},
 		},

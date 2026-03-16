@@ -32,16 +32,15 @@ func (s *VestackVpcService) ReadResources(m map[string]interface{}) (data []inte
 		ok      bool
 	)
 	return bp.WithPageNumberQuery(m, "PageSize", "PageNumber", 20, 1, func(condition map[string]interface{}) ([]interface{}, error) {
-		vpcClient := s.Client.VpcClient
 		action := "DescribeVpcs"
 		logger.Debug(logger.ReqFormat, action, condition)
 		if condition == nil {
-			resp, err = vpcClient.DescribeVpcsCommon(nil)
+			resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), nil)
 			if err != nil {
 				return data, err
 			}
 		} else {
-			resp, err = vpcClient.DescribeVpcsCommon(&condition)
+			resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), &condition)
 			if err != nil {
 				return data, err
 			}
@@ -159,7 +158,7 @@ func (s *VestackVpcService) CreateResource(resourceData *schema.ResourceData, re
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				//创建vpc
-				return s.Client.VpcClient.CreateVpcCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
 			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 				//注意 获取内容 这个地方不能是指针 需要转一次
@@ -189,19 +188,21 @@ func (s *VestackVpcService) ModifyResource(resourceData *schema.ResourceData, re
 					TargetField: "DnsServers",
 					ConvertType: bp.ConvertWithN,
 				},
-				"project_name": {
-					ConvertType: bp.ConvertDefault,
-				},
 			},
 			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 				(*call.SdkParam)["VpcId"] = d.Id()
+				if d.HasChange("dns_servers") {
+					if _, exist := d.GetOk("dns_servers"); !exist {
+						(*call.SdkParam)["DnsServers.1"] = ""
+					}
+				}
 				delete(*call.SdkParam, "Tags")
 				return true, nil
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				//修改vpc属性
-				return s.Client.VpcClient.ModifyVpcAttributesCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
 			Refresh: &bp.StateRefresh{
 				Target:  []string{"Available"},
@@ -229,7 +230,7 @@ func (s *VestackVpcService) RemoveResource(resourceData *schema.ResourceData, r 
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				//删除VPC
-				return s.Client.VpcClient.DeleteVpcCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
 			CallError: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall, baseErr error) error {
 				//出现错误后重试

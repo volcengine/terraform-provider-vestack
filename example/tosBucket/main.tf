@@ -1,8 +1,11 @@
-resource "vestack_tos_bucket" "default" {
-  bucket_name = "test-xym-1"
-  #  storage_class ="IA"
-  public_acl     = "private"
-  enable_version = true
+# create tos bucket
+resource "vestack_tos_bucket" "foo" {
+  bucket_name = "tflyb7"
+  #  storage_class        = "IA"
+  public_acl           = "private"
+  az_redundancy        = "multi-az"
+  enable_version       = true
+  bucket_acl_delivered = true
   account_acl {
     account_id = "1"
     permission = "READ"
@@ -11,4 +14,32 @@ resource "vestack_tos_bucket" "default" {
     account_id = "2001"
     permission = "WRITE_ACP"
   }
+  project_name = "default"
+  tags {
+    key   = "k1"
+    value = "v1"
+  }
 }
+
+# create tos bucket policy
+resource "vestack_tos_bucket_policy" "foo" {
+  bucket_name = vestack_tos_bucket.foo.id
+  policy = jsonencode({
+    Statement = [
+      {
+        Sid    = "test"
+        Effect = "Allow"
+        Principal = [
+          "AccountId/subUserName"
+        ]
+        Action = [
+          "tos:List*"
+        ]
+        Resource = [
+          "trn:tos:::${vestack_tos_bucket.foo.id}"
+        ]
+      }
+    ]
+  })
+}
+

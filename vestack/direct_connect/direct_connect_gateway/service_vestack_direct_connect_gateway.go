@@ -8,23 +8,23 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 	"github.com/volcengine/terraform-provider-vestack/logger"
 )
 
 type VestackDirectConnectGatewayService struct {
-	Client     *ve.SdkClient
-	Dispatcher *ve.Dispatcher
+	Client     *bp.SdkClient
+	Dispatcher *bp.Dispatcher
 }
 
-func NewDirectConnectGatewayService(c *ve.SdkClient) *VestackDirectConnectGatewayService {
+func NewDirectConnectGatewayService(c *bp.SdkClient) *VestackDirectConnectGatewayService {
 	return &VestackDirectConnectGatewayService{
 		Client:     c,
-		Dispatcher: &ve.Dispatcher{},
+		Dispatcher: &bp.Dispatcher{},
 	}
 }
 
-func (s *VestackDirectConnectGatewayService) GetClient() *ve.SdkClient {
+func (s *VestackDirectConnectGatewayService) GetClient() *bp.SdkClient {
 	return s.Client
 }
 
@@ -34,7 +34,7 @@ func (s *VestackDirectConnectGatewayService) ReadResources(m map[string]interfac
 		results interface{}
 		ok      bool
 	)
-	return ve.WithPageNumberQuery(m, "PageSize", "PageNumber", 100, 1, func(condition map[string]interface{}) ([]interface{}, error) {
+	return bp.WithPageNumberQuery(m, "PageSize", "PageNumber", 100, 1, func(condition map[string]interface{}) ([]interface{}, error) {
 		action := "DescribeDirectConnectGateways"
 
 		bytes, _ := json.Marshal(condition)
@@ -52,7 +52,7 @@ func (s *VestackDirectConnectGatewayService) ReadResources(m map[string]interfac
 		}
 		respBytes, _ := json.Marshal(resp)
 		logger.Debug(logger.RespFormat, action, condition, string(respBytes))
-		results, err = ve.ObtainSdkValue("Result.DirectConnectGateways", *resp)
+		results, err = bp.ObtainSdkValue("Result.DirectConnectGateways", *resp)
 		if err != nil {
 			return data, err
 		}
@@ -83,7 +83,7 @@ func (s *VestackDirectConnectGatewayService) ReadResource(resourceData *schema.R
 	}
 	for _, v := range results {
 		if data, ok = v.(map[string]interface{}); !ok {
-			return data, errors.New("value is not map ")
+			return data, errors.New("Value is not map ")
 		}
 	}
 	if len(data) == 0 {
@@ -109,7 +109,7 @@ func (s *VestackDirectConnectGatewayService) RefreshResourceState(resourceData *
 			if err != nil {
 				return nil, "", err
 			}
-			status, err = ve.ObtainSdkValue("Status", d)
+			status, err = bp.ObtainSdkValue("Status", d)
 			if err != nil {
 				return nil, "", err
 			}
@@ -123,101 +123,101 @@ func (s *VestackDirectConnectGatewayService) RefreshResourceState(resourceData *
 	}
 }
 
-func (s *VestackDirectConnectGatewayService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []ve.Callback {
-	callback := ve.Callback{
-		Call: ve.SdkCall{
+func (s *VestackDirectConnectGatewayService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
+	callback := bp.Callback{
+		Call: bp.SdkCall{
 			Action:      "CreateDirectConnectGateway",
-			ConvertMode: ve.RequestConvertAll,
-			Convert: map[string]ve.RequestConvert{
+			ConvertMode: bp.RequestConvertAll,
+			Convert: map[string]bp.RequestConvert{
 				"tags": {
 					TargetField: "Tags",
-					ConvertType: ve.ConvertListN,
+					ConvertType: bp.ConvertListN,
 				},
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				resp, err := s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 				logger.Debug(logger.RespFormat, call.Action, resp, err)
 				return resp, err
 			},
-			AfterCall: func(d *schema.ResourceData, client *ve.SdkClient, resp *map[string]interface{}, call ve.SdkCall) error {
-				id, _ := ve.ObtainSdkValue("Result.DirectConnectGatewayId", *resp)
+			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
+				id, _ := bp.ObtainSdkValue("Result.DirectConnectGatewayId", *resp)
 				d.SetId(id.(string))
 				return nil
 			},
-			Refresh: &ve.StateRefresh{
+			Refresh: &bp.StateRefresh{
 				Target:  []string{"Available"},
 				Timeout: resourceData.Timeout(schema.TimeoutCreate),
 			},
 		},
 	}
-	return []ve.Callback{callback}
+	return []bp.Callback{callback}
 }
 
-func (VestackDirectConnectGatewayService) WithResourceResponseHandlers(d map[string]interface{}) []ve.ResourceResponseHandler {
-	handler := func() (map[string]interface{}, map[string]ve.ResponseConvert, error) {
+func (VestackDirectConnectGatewayService) WithResourceResponseHandlers(d map[string]interface{}) []bp.ResourceResponseHandler {
+	handler := func() (map[string]interface{}, map[string]bp.ResponseConvert, error) {
 		return d, nil, nil
 	}
-	return []ve.ResourceResponseHandler{handler}
+	return []bp.ResourceResponseHandler{handler}
 }
 
-func (s *VestackDirectConnectGatewayService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []ve.Callback {
-	callback := ve.Callback{
-		Call: ve.SdkCall{
+func (s *VestackDirectConnectGatewayService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
+	callback := bp.Callback{
+		Call: bp.SdkCall{
 			Action:      "ModifyDirectConnectGatewayAttributes",
-			ConvertMode: ve.RequestConvertAll,
-			Convert:     map[string]ve.RequestConvert{},
-			BeforeCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (bool, error) {
+			ConvertMode: bp.RequestConvertAll,
+			Convert:     map[string]bp.RequestConvert{},
+			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 				(*call.SdkParam)["DirectConnectGatewayId"] = d.Id()
 				return true, nil
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
 				resp, err := s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 				logger.Debug(logger.RespFormat, call.Action, resp, err)
 				return resp, err
 			},
-			Refresh: &ve.StateRefresh{
+			Refresh: &bp.StateRefresh{
 				Target:  []string{"Available"},
 				Timeout: resourceData.Timeout(schema.TimeoutCreate),
 			},
 		},
 	}
-	return []ve.Callback{callback}
+	return []bp.Callback{callback}
 }
 
-func (s *VestackDirectConnectGatewayService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []ve.Callback {
-	callback := ve.Callback{
-		Call: ve.SdkCall{
+func (s *VestackDirectConnectGatewayService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []bp.Callback {
+	callback := bp.Callback{
+		Call: bp.SdkCall{
 			Action:      "DeleteDirectConnectGateway",
-			ConvertMode: ve.RequestConvertIgnore,
-			ContentType: ve.ContentTypeJson,
+			ConvertMode: bp.RequestConvertIgnore,
+			ContentType: bp.ContentTypeJson,
 			SdkParam: &map[string]interface{}{
 				"DirectConnectGatewayId": resourceData.Id(),
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
-			AfterCall: func(d *schema.ResourceData, client *ve.SdkClient, resp *map[string]interface{}, call ve.SdkCall) error {
-				return ve.CheckResourceUtilRemoved(d, s.ReadResource, 5*time.Minute)
+			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
+				return bp.CheckResourceUtilRemoved(d, s.ReadResource, 5*time.Minute)
 			},
 		},
 	}
-	return []ve.Callback{callback}
+	return []bp.Callback{callback}
 }
 
-func (s *VestackDirectConnectGatewayService) DatasourceResources(*schema.ResourceData, *schema.Resource) ve.DataSourceInfo {
-	return ve.DataSourceInfo{
-		RequestConverts: map[string]ve.RequestConvert{
+func (s *VestackDirectConnectGatewayService) DatasourceResources(*schema.ResourceData, *schema.Resource) bp.DataSourceInfo {
+	return bp.DataSourceInfo{
+		RequestConverts: map[string]bp.RequestConvert{
 			"ids": {
 				TargetField: "DirectConnectGatewayIds",
-				ConvertType: ve.ConvertWithN,
+				ConvertType: bp.ConvertWithN,
 			},
 			"tag_filters": {
 				TargetField: "TagFilters",
-				ConvertType: ve.ConvertListN,
-				NextLevelConvert: map[string]ve.RequestConvert{
+				ConvertType: bp.ConvertListN,
+				NextLevelConvert: map[string]bp.RequestConvert{
 					"value": {
 						TargetField: "Values.1",
 					},
@@ -227,7 +227,7 @@ func (s *VestackDirectConnectGatewayService) DatasourceResources(*schema.Resourc
 		NameField:    "DirectConnectGatewayName",
 		IdField:      "DirectConnectGatewayId",
 		CollectField: "direct_connect_gateways",
-		ResponseConverts: map[string]ve.ResponseConvert{
+		ResponseConverts: map[string]bp.ResponseConvert{
 			"DirectConnectGatewayId": {
 				TargetField: "id",
 				KeepDefault: true,
@@ -240,12 +240,12 @@ func (s *VestackDirectConnectGatewayService) ReadResourceId(id string) string {
 	return id
 }
 
-func getUniversalInfo(actionName string) ve.UniversalInfo {
-	return ve.UniversalInfo{
+func getUniversalInfo(actionName string) bp.UniversalInfo {
+	return bp.UniversalInfo{
 		ServiceName: "directconnect",
 		Version:     "2020-04-01",
-		HttpMethod:  ve.GET,
-		ContentType: ve.Default,
+		HttpMethod:  bp.GET,
+		ContentType: bp.Default,
 		Action:      actionName,
 	}
 }

@@ -1,0 +1,1 @@
+data "vestack_ecs_instance_types" "foo" {}

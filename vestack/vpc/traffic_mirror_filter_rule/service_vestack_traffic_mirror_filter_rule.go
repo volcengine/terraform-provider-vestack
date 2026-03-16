@@ -9,23 +9,23 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 	"github.com/volcengine/terraform-provider-vestack/logger"
 )
 
 type VestackTrafficMirrorFilterRuleService struct {
-	Client     *ve.SdkClient
-	Dispatcher *ve.Dispatcher
+	Client     *bp.SdkClient
+	Dispatcher *bp.Dispatcher
 }
 
-func NewTrafficMirrorFilterRuleService(c *ve.SdkClient) *VestackTrafficMirrorFilterRuleService {
+func NewTrafficMirrorFilterRuleService(c *bp.SdkClient) *VestackTrafficMirrorFilterRuleService {
 	return &VestackTrafficMirrorFilterRuleService{
 		Client:     c,
-		Dispatcher: &ve.Dispatcher{},
+		Dispatcher: &bp.Dispatcher{},
 	}
 }
 
-func (s *VestackTrafficMirrorFilterRuleService) GetClient() *ve.SdkClient {
+func (s *VestackTrafficMirrorFilterRuleService) GetClient() *bp.SdkClient {
 	return s.Client
 }
 
@@ -36,7 +36,7 @@ func (s *VestackTrafficMirrorFilterRuleService) ReadResources(m map[string]inter
 		filters []interface{}
 		ok      bool
 	)
-	return ve.WithNextTokenQuery(m, "MaxResults", "NextToken", 100, nil, func(condition map[string]interface{}) (data []interface{}, next string, err error) {
+	return bp.WithNextTokenQuery(m, "MaxResults", "NextToken", 100, nil, func(condition map[string]interface{}) (data []interface{}, next string, err error) {
 		action := "DescribeTrafficMirrorFilters"
 
 		bytes, _ := json.Marshal(condition)
@@ -54,11 +54,11 @@ func (s *VestackTrafficMirrorFilterRuleService) ReadResources(m map[string]inter
 		}
 		respBytes, _ := json.Marshal(resp)
 		logger.Debug(logger.RespFormat, action, condition, string(respBytes))
-		results, err = ve.ObtainSdkValue("Result.TrafficMirrorFilters", *resp)
+		results, err = bp.ObtainSdkValue("Result.TrafficMirrorFilters", *resp)
 		if err != nil {
 			return data, next, err
 		}
-		nextToken, err := ve.ObtainSdkValue("Result.NextToken", *resp)
+		nextToken, err := bp.ObtainSdkValue("Result.NextToken", *resp)
 		if err != nil {
 			return data, next, err
 		}
@@ -145,7 +145,7 @@ func (s *VestackTrafficMirrorFilterRuleService) RefreshResourceState(resourceDat
 			if err != nil {
 				return nil, "", err
 			}
-			status, err = ve.ObtainSdkValue("Status", d)
+			status, err = bp.ObtainSdkValue("Status", d)
 			if err != nil {
 				return nil, "", err
 			}
@@ -159,27 +159,27 @@ func (s *VestackTrafficMirrorFilterRuleService) RefreshResourceState(resourceDat
 	}
 }
 
-func (VestackTrafficMirrorFilterRuleService) WithResourceResponseHandlers(d map[string]interface{}) []ve.ResourceResponseHandler {
-	handler := func() (map[string]interface{}, map[string]ve.ResponseConvert, error) {
+func (VestackTrafficMirrorFilterRuleService) WithResourceResponseHandlers(d map[string]interface{}) []bp.ResourceResponseHandler {
+	handler := func() (map[string]interface{}, map[string]bp.ResponseConvert, error) {
 		return d, nil, nil
 	}
-	return []ve.ResourceResponseHandler{handler}
+	return []bp.ResourceResponseHandler{handler}
 }
 
-func (s *VestackTrafficMirrorFilterRuleService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []ve.Callback {
-	callback := ve.Callback{
-		Call: ve.SdkCall{
+func (s *VestackTrafficMirrorFilterRuleService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
+	callback := bp.Callback{
+		Call: bp.SdkCall{
 			Action:      "CreateTrafficMirrorFilterRule",
-			ConvertMode: ve.RequestConvertAll,
-			Convert:     map[string]ve.RequestConvert{},
-			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
+			ConvertMode: bp.RequestConvertAll,
+			Convert:     map[string]bp.RequestConvert{},
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				resp, err := s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 				logger.Debug(logger.RespFormat, call.Action, resp, err)
 				return resp, err
 			},
-			AfterCall: func(d *schema.ResourceData, client *ve.SdkClient, resp *map[string]interface{}, call ve.SdkCall) error {
-				id, _ := ve.ObtainSdkValue("Result.TrafficMirrorFilterRuleId", *resp)
+			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
+				id, _ := bp.ObtainSdkValue("Result.TrafficMirrorFilterRuleId", *resp)
 				filterId := d.Get("traffic_mirror_filter_id").(string)
 				d.SetId(filterId + ":" + id.(string))
 				return nil
@@ -187,21 +187,21 @@ func (s *VestackTrafficMirrorFilterRuleService) CreateResource(resourceData *sch
 			LockId: func(d *schema.ResourceData) string {
 				return d.Get("traffic_mirror_filter_id").(string)
 			},
-			Refresh: &ve.StateRefresh{
+			Refresh: &bp.StateRefresh{
 				Target:  []string{"Available"},
 				Timeout: resourceData.Timeout(schema.TimeoutCreate),
 			},
 		},
 	}
-	return []ve.Callback{callback}
+	return []bp.Callback{callback}
 }
 
-func (s *VestackTrafficMirrorFilterRuleService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []ve.Callback {
-	callback := ve.Callback{
-		Call: ve.SdkCall{
+func (s *VestackTrafficMirrorFilterRuleService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
+	callback := bp.Callback{
+		Call: bp.SdkCall{
 			Action:      "ModifyTrafficMirrorFilterRuleAttributes",
-			ConvertMode: ve.RequestConvertInConvert,
-			Convert: map[string]ve.RequestConvert{
+			ConvertMode: bp.RequestConvertInConvert,
+			Convert: map[string]bp.RequestConvert{
 				"traffic_direction": {
 					TargetField: "TrafficDirection",
 				},
@@ -230,7 +230,7 @@ func (s *VestackTrafficMirrorFilterRuleService) ModifyResource(resourceData *sch
 					TargetField: "Description",
 				},
 			},
-			BeforeCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (bool, error) {
+			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 				if len(*call.SdkParam) > 0 {
 					ids := strings.Split(d.Id(), ":")
 					if len(ids) != 2 {
@@ -241,7 +241,7 @@ func (s *VestackTrafficMirrorFilterRuleService) ModifyResource(resourceData *sch
 				}
 				return false, nil
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
 				resp, err := s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 				logger.Debug(logger.RespFormat, call.Action, resp, err)
@@ -250,21 +250,21 @@ func (s *VestackTrafficMirrorFilterRuleService) ModifyResource(resourceData *sch
 			LockId: func(d *schema.ResourceData) string {
 				return d.Get("traffic_mirror_filter_id").(string)
 			},
-			Refresh: &ve.StateRefresh{
+			Refresh: &bp.StateRefresh{
 				Target:  []string{"Available"},
 				Timeout: resourceData.Timeout(schema.TimeoutUpdate),
 			},
 		},
 	}
-	return []ve.Callback{callback}
+	return []bp.Callback{callback}
 }
 
-func (s *VestackTrafficMirrorFilterRuleService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []ve.Callback {
-	callback := ve.Callback{
-		Call: ve.SdkCall{
+func (s *VestackTrafficMirrorFilterRuleService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []bp.Callback {
+	callback := bp.Callback{
+		Call: bp.SdkCall{
 			Action:      "DeleteTrafficMirrorFilterRule",
-			ConvertMode: ve.RequestConvertIgnore,
-			BeforeCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (bool, error) {
+			ConvertMode: bp.RequestConvertIgnore,
+			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 				ids := strings.Split(d.Id(), ":")
 				if len(ids) != 2 {
 					return false, fmt.Errorf("invalid traffic mirror filter rule id: %s", d.Id())
@@ -272,7 +272,7 @@ func (s *VestackTrafficMirrorFilterRuleService) RemoveResource(resourceData *sch
 				(*call.SdkParam)["TrafficMirrorFilterRuleId"] = ids[1]
 				return true, nil
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
 				resp, err := s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 				logger.Debug(logger.RespFormat, call.Action, resp, err)
@@ -281,15 +281,15 @@ func (s *VestackTrafficMirrorFilterRuleService) RemoveResource(resourceData *sch
 			LockId: func(d *schema.ResourceData) string {
 				return d.Get("traffic_mirror_filter_id").(string)
 			},
-			AfterCall: func(d *schema.ResourceData, client *ve.SdkClient, resp *map[string]interface{}, call ve.SdkCall) error {
-				return ve.CheckResourceUtilRemoved(d, s.ReadResource, 5*time.Minute)
+			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
+				return bp.CheckResourceUtilRemoved(d, s.ReadResource, 5*time.Minute)
 			},
-			CallError: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall, baseErr error) error {
+			CallError: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall, baseErr error) error {
 				//出现错误后重试
 				return resource.Retry(5*time.Minute, func() *resource.RetryError {
 					_, callErr := s.ReadResource(d, "")
 					if callErr != nil {
-						if ve.ResourceNotFoundError(callErr) {
+						if bp.ResourceNotFoundError(callErr) {
 							return nil
 						} else {
 							return resource.NonRetryableError(fmt.Errorf("error on reading traffic mirror filter rule on delete %q, %w", d.Id(), callErr))
@@ -304,24 +304,24 @@ func (s *VestackTrafficMirrorFilterRuleService) RemoveResource(resourceData *sch
 			},
 		},
 	}
-	return []ve.Callback{callback}
+	return []bp.Callback{callback}
 }
 
-func (s *VestackTrafficMirrorFilterRuleService) DatasourceResources(*schema.ResourceData, *schema.Resource) ve.DataSourceInfo {
-	return ve.DataSourceInfo{
-		RequestConverts: map[string]ve.RequestConvert{
+func (s *VestackTrafficMirrorFilterRuleService) DatasourceResources(*schema.ResourceData, *schema.Resource) bp.DataSourceInfo {
+	return bp.DataSourceInfo{
+		RequestConverts: map[string]bp.RequestConvert{
 			"traffic_mirror_filter_ids": {
 				TargetField: "TrafficMirrorFilterIds",
-				ConvertType: ve.ConvertWithN,
+				ConvertType: bp.ConvertWithN,
 			},
 			"traffic_mirror_filter_names": {
 				TargetField: "TrafficMirrorFilterNames",
-				ConvertType: ve.ConvertWithN,
+				ConvertType: bp.ConvertWithN,
 			},
 			"tags": {
 				TargetField: "TagFilters",
-				ConvertType: ve.ConvertListN,
-				NextLevelConvert: map[string]ve.RequestConvert{
+				ConvertType: bp.ConvertListN,
+				NextLevelConvert: map[string]bp.RequestConvert{
 					"value": {
 						TargetField: "Values.1",
 					},
@@ -330,7 +330,7 @@ func (s *VestackTrafficMirrorFilterRuleService) DatasourceResources(*schema.Reso
 		},
 		IdField:      "TrafficMirrorFilterRuleId",
 		CollectField: "traffic_mirror_filter_rules",
-		ResponseConverts: map[string]ve.ResponseConvert{
+		ResponseConverts: map[string]bp.ResponseConvert{
 			"TrafficMirrorFilterRuleId": {
 				TargetField: "id",
 				KeepDefault: true,
@@ -343,12 +343,12 @@ func (s *VestackTrafficMirrorFilterRuleService) ReadResourceId(id string) string
 	return id
 }
 
-func getUniversalInfo(actionName string) ve.UniversalInfo {
-	return ve.UniversalInfo{
+func getUniversalInfo(actionName string) bp.UniversalInfo {
+	return bp.UniversalInfo{
 		ServiceName: "vpc",
 		Version:     "2020-04-01",
-		HttpMethod:  ve.GET,
-		ContentType: ve.Default,
+		HttpMethod:  bp.GET,
+		ContentType: bp.Default,
 		Action:      actionName,
 	}
 }

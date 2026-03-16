@@ -78,7 +78,7 @@ func (c *SdkCall) InitWriteCall(resourceData *schema.ResourceData, resource *sch
 	return err
 }
 
-func volcengineSort(source []string) (result []string) {
+func vestackSort(source []string) (result []string) {
 	mapping := make(map[string]int)
 	for _, k := range source {
 		if strings.Contains(k, ".") {
@@ -175,7 +175,7 @@ func SortAndStartTransJson(source map[string]interface{}) (map[string]interface{
 	}
 	sort.Strings(a)
 
-	a = volcengineSort(a)
+	a = vestackSort(a)
 
 	for _, k := range a {
 		k1, v1, err := transToJson(k, source[k], "", &target)
@@ -395,4 +395,26 @@ func CheckResourceUtilRemoved(d *schema.ResourceData, readResourceFunc ReadResou
 			}
 		}
 	})
+}
+
+func ResourceStateRefreshFunc(d *schema.ResourceData, readResource ReadResourceFunc, id string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		data, err := readResource(d, id)
+		if err != nil {
+			return nil, "", err
+		}
+		if data == nil {
+			return nil, "", nil
+		}
+		status := data["Status"]
+		if status == nil {
+			return data, "", nil
+		}
+		// 安全的类型断言：避免 panic
+		statusStr, ok := status.(string)
+		if !ok {
+			return data, "", nil
+		}
+		return data, statusStr, nil
+	}
 }

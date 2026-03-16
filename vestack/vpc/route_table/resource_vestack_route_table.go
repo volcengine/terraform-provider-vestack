@@ -53,8 +53,10 @@ func ResourceVestackRouteTable() *schema.Resource {
 			"project_name": {
 				Type:        schema.TypeString,
 				Optional:    true,
+				Computed:    true,
 				Description: "The ProjectName of the route table.",
 			},
+			"tags": bp.TagsSchema(),
 		},
 	}
 }

@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 /*
@@ -52,12 +52,12 @@ func ResourceVestackDirectConnectGatewayRoute() *schema.Resource {
 		},
 	}
 	dataSource := DataSourceVestackDirectConnectGatewayRoutes().Schema["direct_connect_gateway_routes"].Elem.(*schema.Resource).Schema
-	ve.MergeDateSourceToResource(dataSource, &resource.Schema)
+	bp.MergeDateSourceToResource(dataSource, &resource.Schema)
 	return resource
 }
 
 func resourceVestackDirectConnectGatewayRouteCreate(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewDirectConnectGatewayRouteService(meta.(*ve.SdkClient))
+	service := NewDirectConnectGatewayRouteService(meta.(*bp.SdkClient))
 	err = service.Dispatcher.Create(service, d, ResourceVestackDirectConnectGatewayRoute())
 	if err != nil {
 		return fmt.Errorf("error on creating direct_connect_gateway_route %q, %s", d.Id(), err)
@@ -66,7 +66,7 @@ func resourceVestackDirectConnectGatewayRouteCreate(d *schema.ResourceData, meta
 }
 
 func resourceVestackDirectConnectGatewayRouteRead(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewDirectConnectGatewayRouteService(meta.(*ve.SdkClient))
+	service := NewDirectConnectGatewayRouteService(meta.(*bp.SdkClient))
 	err = service.Dispatcher.Read(service, d, ResourceVestackDirectConnectGatewayRoute())
 	if err != nil {
 		return fmt.Errorf("error on reading direct_connect_gateway_route %q, %s", d.Id(), err)
@@ -75,7 +75,7 @@ func resourceVestackDirectConnectGatewayRouteRead(d *schema.ResourceData, meta i
 }
 
 func resourceVestackDirectConnectGatewayRouteDelete(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewDirectConnectGatewayRouteService(meta.(*ve.SdkClient))
+	service := NewDirectConnectGatewayRouteService(meta.(*bp.SdkClient))
 	err = service.Dispatcher.Delete(service, d, ResourceVestackDirectConnectGatewayRoute())
 	if err != nil {
 		return fmt.Errorf("error on deleting direct_connect_gateway_route %q, %s", d.Id(), err)

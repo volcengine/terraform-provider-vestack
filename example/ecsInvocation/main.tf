@@ -10,4 +10,13 @@ resource "vestack_ecs_invocation" "foo" {
   frequency              = "5m"
   launch_time            = "2023-06-20T09:48:00Z"
   recurrence_end_time    = "2023-06-20T09:59:00Z"
+  project_name           = "default"
+  tags {
+    key   = "k1"
+    value = "v1"
+  }
+  parameters {
+    name  = "test_str"
+    value = "tf"
+  }
 }

@@ -36,16 +36,15 @@ func (s *VestackVolumeAttachService) ReadResources(condition map[string]interfac
 		ok      bool
 	)
 	return bp.WithPageNumberQuery(condition, "PageSize", "PageNumber", 20, 1, func(m map[string]interface{}) ([]interface{}, error) {
-		ebs := s.Client.EbsClient
 		action := "DescribeVolumes"
 		logger.Debug(logger.ReqFormat, action, condition)
 		if condition == nil {
-			resp, err = ebs.DescribeVolumesCommon(nil)
+			resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), nil)
 			if err != nil {
 				return data, err
 			}
 		} else {
-			resp, err = ebs.DescribeVolumesCommon(&condition)
+			resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), &condition)
 			if err != nil {
 				return data, err
 			}
@@ -163,7 +162,7 @@ func (s *VestackVolumeAttachService) CreateResource(resourceData *schema.Resourc
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
-				return s.Client.EbsClient.AttachVolumeCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
 			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 				d.SetId(fmt.Sprint((*call.SdkParam)["VolumeId"], ":", (*call.SdkParam)["InstanceId"]))
@@ -193,7 +192,7 @@ func (s *VestackVolumeAttachService) RemoveResource(resourceData *schema.Resourc
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
-				return s.Client.EbsClient.DetachVolumeCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
 			CallError: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall, baseErr error) error {
 				return resource.Retry(15*time.Minute, func() *resource.RetryError {
@@ -252,4 +251,13 @@ func importVolumeAttach(d *schema.ResourceData, meta interface{}) ([]*schema.Res
 
 func (s *VestackVolumeAttachService) ReadResourceId(id string) string {
 	return id
+}
+
+func getUniversalInfo(actionName string) bp.UniversalInfo {
+	return bp.UniversalInfo{
+		ServiceName: "storage_ebs",
+		Version:     "2020-04-01",
+		HttpMethod:  bp.GET,
+		Action:      actionName,
+	}
 }

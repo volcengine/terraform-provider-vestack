@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	bp "github.com/volcengine/terraform-provider-vestack/common"
 	"github.com/volcengine/terraform-provider-vestack/logger"
+	"github.com/volcengine/terraform-provider-vestack/vestack/vpc/vpc"
 )
 
 type VestackIpv6GatewayService struct {
@@ -133,6 +134,20 @@ func (s *VestackIpv6GatewayService) CreateResource(resourceData *schema.Resource
 		Call: bp.SdkCall{
 			Action:      "CreateIpv6Gateway",
 			ConvertMode: bp.RequestConvertAll,
+			Convert: map[string]bp.RequestConvert{
+				"tags": {
+					TargetField: "Tags",
+					ConvertType: bp.ConvertListN,
+					NextLevelConvert: map[string]bp.RequestConvert{
+						"key": {
+							TargetField: "Key",
+						},
+						"value": {
+							TargetField: "Value",
+						},
+					},
+				},
+			},
 			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 				(*call.SdkParam)["ClientToken"] = uuid.New().String()
 				return true, nil
@@ -149,6 +164,13 @@ func (s *VestackIpv6GatewayService) CreateResource(resourceData *schema.Resource
 			Refresh: &bp.StateRefresh{
 				Target:  []string{"Available"},
 				Timeout: resourceData.Timeout(schema.TimeoutCreate),
+			},
+			ExtraRefresh: map[bp.ResourceService]*bp.StateRefresh{
+				vpc.NewVpcService(s.Client): {
+					Target:     []string{"Available"},
+					Timeout:    resourceData.Timeout(schema.TimeoutCreate),
+					ResourceId: resourceData.Get("vpc_id").(string),
+				},
 			},
 			LockId: func(d *schema.ResourceData) string {
 				return d.Get("vpc_id").(string)
@@ -186,6 +208,9 @@ func (s *VestackIpv6GatewayService) ModifyResource(resourceData *schema.Resource
 	}
 	callbacks = append(callbacks, callback)
 
+	// 更新 tags
+	setResourceTagsCallbacks := bp.SetResourceTags(s.Client, "TagResources", "UntagResources", "ipv6gateway", resourceData, getUniversalInfo)
+	callbacks = append(callbacks, setResourceTagsCallbacks...)
 	return callbacks
 }
 
@@ -202,6 +227,13 @@ func (s *VestackIpv6GatewayService) RemoveResource(resourceData *schema.Resource
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
+			},
+			ExtraRefresh: map[bp.ResourceService]*bp.StateRefresh{
+				vpc.NewVpcService(s.Client): {
+					Target:     []string{"Available"},
+					Timeout:    resourceData.Timeout(schema.TimeoutCreate),
+					ResourceId: resourceData.Get("vpc_id").(string),
+				},
 			},
 			LockId: func(d *schema.ResourceData) string {
 				return d.Get("vpc_id").(string)
@@ -242,6 +274,18 @@ func (s *VestackIpv6GatewayService) DatasourceResources(*schema.ResourceData, *s
 				TargetField: "VpcIds",
 				ConvertType: bp.ConvertWithN,
 			},
+			"tags": {
+				TargetField: "TagFilters",
+				ConvertType: bp.ConvertListN,
+				NextLevelConvert: map[string]bp.RequestConvert{
+					"key": {
+						TargetField: "Key",
+					},
+					"value": {
+						TargetField: "Values.1",
+					},
+				},
+			},
 		},
 		NameField:    "Name",
 		IdField:      "Ipv6GatewayId",
@@ -257,6 +301,15 @@ func (s *VestackIpv6GatewayService) DatasourceResources(*schema.ResourceData, *s
 
 func (s *VestackIpv6GatewayService) ReadResourceId(id string) string {
 	return id
+}
+
+func (s *VestackIpv6GatewayService) ProjectTrn() *bp.ProjectTrn {
+	return &bp.ProjectTrn{
+		ServiceName:          "vpc",
+		ResourceType:         "ipv6gateway",
+		ProjectResponseField: "ProjectName",
+		ProjectSchemaField:   "project_name",
+	}
 }
 
 func getUniversalInfo(actionName string) bp.UniversalInfo {

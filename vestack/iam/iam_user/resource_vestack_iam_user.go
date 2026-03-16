@@ -25,7 +25,10 @@ func ResourceVestackIamUser() *schema.Resource {
 		Update: resourceVestackIamUserUpdate,
 		Delete: resourceVestackIamUserDelete,
 		Importer: &schema.ResourceImporter{
-			State: schema.ImportStatePassthrough,
+			State: func(d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
+				_ = d.Set("user_name", d.Id())
+				return []*schema.ResourceData{d}, nil
+			},
 		},
 		Timeouts: &schema.ResourceTimeout{
 			Create: schema.DefaultTimeout(30 * time.Minute),
@@ -46,7 +49,7 @@ func ResourceVestackIamUser() *schema.Resource {
 			"mobile_phone": {
 				Type:             schema.TypeString,
 				Optional:         true,
-				Description:      "The mobile phone of the user.",
+				Description:      "The mobile phone of the user, reference: +8618088888888.",
 				DiffSuppressFunc: phoneDiffSuppressFunc,
 			},
 			"email": {
@@ -59,6 +62,7 @@ func ResourceVestackIamUser() *schema.Resource {
 				Optional:    true,
 				Description: "The description of the user.",
 			},
+			"tags": bp.TagsSchema(),
 		},
 	}
 	bp.MergeDateSourceToResource(DataSourceVestackIamUsers().Schema["users"].Elem.(*schema.Resource).Schema, &resource.Schema)
@@ -78,6 +82,10 @@ func resourceVestackIamUserRead(d *schema.ResourceData, meta interface{}) (err e
 	service := NewIamUserService(meta.(*bp.SdkClient))
 	err = bp.DefaultDispatcher().Read(service, d, ResourceVestackIamUser())
 	if err != nil {
+		if bp.ResourceNotFoundError(err) {
+			d.SetId("")
+			return nil
+		}
 		return fmt.Errorf("error on reading iam user %q, %s", d.Id(), err)
 	}
 	return err

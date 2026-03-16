@@ -147,6 +147,11 @@ func ResourceVestackDefaultNodePool() *schema.Resource {
 							Required:    true,
 							Description: "The Cordon of KubernetesConfig.",
 						},
+						"name_prefix": {
+							Type:        schema.TypeString,
+							Optional:    true,
+							Description: "The NamePrefix of node metadata.",
+						},
 					},
 				},
 				Description: "The KubernetesConfig of NodeConfig.",
@@ -203,6 +208,11 @@ func ResourceVestackDefaultNodePool() *schema.Resource {
 								},
 							},
 							Description: "The Security of NodeConfig.",
+						},
+						"pre_script": {
+							Type:        schema.TypeString,
+							Optional:    true,
+							Description: "The PreScript of NodeConfig.",
 						},
 						"initialize_script": {
 							Type:        schema.TypeString,

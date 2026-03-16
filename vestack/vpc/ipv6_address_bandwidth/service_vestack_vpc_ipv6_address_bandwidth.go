@@ -157,6 +157,18 @@ func (s *VestackIpv6AddressBandwidthService) CreateResource(resourceData *schema
 					TargetField: "BillingType",
 					Convert:     billingTypeRequestConvert,
 				},
+				"tags": {
+					TargetField: "Tags",
+					ConvertType: bp.ConvertListN,
+					NextLevelConvert: map[string]bp.RequestConvert{
+						"Key": {
+							TargetField: "Key",
+						},
+						"Value": {
+							TargetField: "Value",
+						},
+					},
+				},
 			},
 			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 				(*call.SdkParam)["ClientToken"] = uuid.New().String()
@@ -205,6 +217,9 @@ func (s *VestackIpv6AddressBandwidthService) ModifyResource(resourceData *schema
 	}
 	callbacks = append(callbacks, callback)
 
+	// 更新 tags
+	setResourceTagsCallbacks := bp.SetResourceTags(s.Client, "TagResources", "UntagResources", "ipv6addressbandwidth", resourceData, getUniversalInfo)
+	callbacks = append(callbacks, setResourceTagsCallbacks...)
 	return callbacks
 }
 
@@ -260,6 +275,18 @@ func (s *VestackIpv6AddressBandwidthService) DatasourceResources(*schema.Resourc
 			"ipv6_addresses": {
 				TargetField: "Ipv6Addresses",
 				ConvertType: bp.ConvertWithN,
+			},
+			"tags": {
+				TargetField: "TagFilters",
+				ConvertType: bp.ConvertListN,
+				NextLevelConvert: map[string]bp.RequestConvert{
+					"key": {
+						TargetField: "Key",
+					},
+					"value": {
+						TargetField: "Values.1",
+					},
+				},
 			},
 		},
 		IdField:      "AllocationId",

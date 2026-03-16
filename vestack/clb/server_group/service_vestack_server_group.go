@@ -7,22 +7,22 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 	"github.com/volcengine/terraform-provider-vestack/logger"
 	"github.com/volcengine/terraform-provider-vestack/vestack/clb/clb"
 )
 
 type VestackServerGroupService struct {
-	Client *ve.SdkClient
+	Client *bp.SdkClient
 }
 
-func NewServerGroupService(c *ve.SdkClient) *VestackServerGroupService {
+func NewServerGroupService(c *bp.SdkClient) *VestackServerGroupService {
 	return &VestackServerGroupService{
 		Client: c,
 	}
 }
 
-func (s *VestackServerGroupService) GetClient() *ve.SdkClient {
+func (s *VestackServerGroupService) GetClient() *bp.SdkClient {
 	return s.Client
 }
 
@@ -32,7 +32,7 @@ func (s *VestackServerGroupService) ReadResources(condition map[string]interface
 		results interface{}
 		ok      bool
 	)
-	return ve.WithPageNumberQuery(condition, "PageSize", "PageNumber", 20, 1, func(m map[string]interface{}) ([]interface{}, error) {
+	data, err = bp.WithPageNumberQuery(condition, "PageSize", "PageNumber", 20, 1, func(m map[string]interface{}) ([]interface{}, error) {
 		action := "DescribeServerGroups"
 		logger.Debug(logger.ReqFormat, action, condition)
 		if condition == nil {
@@ -47,7 +47,7 @@ func (s *VestackServerGroupService) ReadResources(condition map[string]interface
 			}
 		}
 
-		results, err = ve.ObtainSdkValue("Result.ServerGroups", *resp)
+		results, err = bp.ObtainSdkValue("Result.ServerGroups", *resp)
 		if err != nil {
 			return data, err
 		}
@@ -57,19 +57,40 @@ func (s *VestackServerGroupService) ReadResources(condition map[string]interface
 		if data, ok = results.([]interface{}); !ok {
 			return data, errors.New("Result.ServerGroups is not Slice")
 		}
-		for index, serverGroup := range data {
-			if serverGroupMap, ok := serverGroup.(map[string]interface{}); ok {
-				id := serverGroupMap["ServerGroupId"].(string)
-				clbId, err := s.queryLoadBalancerId(id)
-				if err != nil {
-					return data, err
-				}
-				serverGroupMap["LoadBalancerId"] = clbId
-				data[index] = serverGroupMap
-			}
-		}
+		data, err = removeSystemTags(data)
 		return data, err
 	})
+
+	if err != nil {
+		return data, err
+	}
+	for _, serverGroup := range data {
+		if serverGroupMap, ok := serverGroup.(map[string]interface{}); ok {
+			id := serverGroupMap["ServerGroupId"].(string)
+			detailAction := "DescribeServerGroupAttributes"
+			req := map[string]interface{}{
+				"ServerGroupId": id,
+			}
+			logger.Debug(logger.ReqFormat, detailAction, req)
+			detailResp, err := s.Client.UniversalClient.DoCall(getUniversalInfo(detailAction), &req)
+			if err != nil {
+				return data, err
+			}
+			logger.Debug(logger.RespFormat, detailAction, *detailResp)
+
+			clbId, err := bp.ObtainSdkValue("Result.LoadBalancerId", *detailResp)
+			if err != nil {
+				return data, err
+			}
+			serverGroupMap["LoadBalancerId"] = clbId
+			listeners, err := bp.ObtainSdkValue("Result.Listeners", *detailResp)
+			if err != nil {
+				return data, err
+			}
+			serverGroupMap["Listeners"] = listeners
+		}
+	}
+	return data, err
 }
 
 func (s *VestackServerGroupService) ReadResource(resourceData *schema.ResourceData, serverGroupId string) (data map[string]interface{}, err error) {
@@ -102,36 +123,40 @@ func (s *VestackServerGroupService) RefreshResourceState(resourceData *schema.Re
 	return nil
 }
 
-func (VestackServerGroupService) WithResourceResponseHandlers(serverGroup map[string]interface{}) []ve.ResourceResponseHandler {
-	handler := func() (map[string]interface{}, map[string]ve.ResponseConvert, error) {
+func (VestackServerGroupService) WithResourceResponseHandlers(serverGroup map[string]interface{}) []bp.ResourceResponseHandler {
+	handler := func() (map[string]interface{}, map[string]bp.ResponseConvert, error) {
 		return serverGroup, nil, nil
 	}
-	return []ve.ResourceResponseHandler{handler}
+	return []bp.ResourceResponseHandler{handler}
 
 }
 
-func (s *VestackServerGroupService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []ve.Callback {
-	callback := ve.Callback{
-		Call: ve.SdkCall{
+func (s *VestackServerGroupService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
+	callback := bp.Callback{
+		Call: bp.SdkCall{
 			Action:      "CreateServerGroup",
-			ConvertMode: ve.RequestConvertAll,
-			Convert: map[string]ve.RequestConvert{
+			ConvertMode: bp.RequestConvertAll,
+			Convert: map[string]bp.RequestConvert{
 				"servers": {
-					ConvertType: ve.ConvertListN,
+					ConvertType: bp.ConvertListN,
+				},
+				"tags": {
+					TargetField: "Tags",
+					ConvertType: bp.ConvertListN,
 				},
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				// 创建 server group
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
-			AfterCall: func(d *schema.ResourceData, client *ve.SdkClient, resp *map[string]interface{}, call ve.SdkCall) error {
+			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 				// 注意 获取内容 这个地方不能是指针 需要转一次
-				id, _ := ve.ObtainSdkValue("Result.ServerGroupId", *resp)
+				id, _ := bp.ObtainSdkValue("Result.ServerGroupId", *resp)
 				d.SetId(id.(string))
 				return nil
 			},
-			ExtraRefresh: map[ve.ResourceService]*ve.StateRefresh{
+			ExtraRefresh: map[bp.ResourceService]*bp.StateRefresh{
 				clb.NewClbService(s.Client): {
 					Target:     []string{"Active", "Inactive"},
 					Timeout:    resourceData.Timeout(schema.TimeoutCreate),
@@ -143,32 +168,32 @@ func (s *VestackServerGroupService) CreateResource(resourceData *schema.Resource
 			},
 		},
 	}
-	return []ve.Callback{callback}
+	return []bp.Callback{callback}
 
 }
 
-func (s *VestackServerGroupService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []ve.Callback {
+func (s *VestackServerGroupService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
 	clbId, err := s.queryLoadBalancerId(resourceData.Id())
 	if err != nil {
-		return []ve.Callback{{
+		return []bp.Callback{{
 			Err: err,
 		}}
 	}
-
-	callback := ve.Callback{
-		Call: ve.SdkCall{
+	var callbacks []bp.Callback
+	callback := bp.Callback{
+		Call: bp.SdkCall{
 			Action:      "ModifyServerGroupAttributes",
-			ConvertMode: ve.RequestConvertAll,
-			BeforeCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (bool, error) {
+			ConvertMode: bp.RequestConvertAll,
+			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 				(*call.SdkParam)["ServerGroupId"] = d.Id()
 				return true, nil
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				// 修改 server group 属性
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
-			ExtraRefresh: map[ve.ResourceService]*ve.StateRefresh{
+			ExtraRefresh: map[bp.ResourceService]*bp.StateRefresh{
 				clb.NewClbService(s.Client): {
 					Target:     []string{"Active", "Inactive"},
 					Timeout:    resourceData.Timeout(schema.TimeoutCreate),
@@ -180,35 +205,41 @@ func (s *VestackServerGroupService) ModifyResource(resourceData *schema.Resource
 			},
 		},
 	}
-	return []ve.Callback{callback}
+	callbacks = append(callbacks, callback)
+
+	// 更新tags
+	setResourceTagsCallbacks := bp.SetResourceTags(s.Client, "TagResources", "UntagResources", "servergroup", resourceData, getUniversalInfo)
+	callbacks = append(callbacks, setResourceTagsCallbacks...)
+
+	return callbacks
 }
 
-func (s *VestackServerGroupService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []ve.Callback {
+func (s *VestackServerGroupService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []bp.Callback {
 	clbId, err := s.queryLoadBalancerId(resourceData.Id())
 	if err != nil {
-		return []ve.Callback{{
+		return []bp.Callback{{
 			Err: err,
 		}}
 	}
 
-	callback := ve.Callback{
-		Call: ve.SdkCall{
+	callback := bp.Callback{
+		Call: bp.SdkCall{
 			Action:      "DeleteServerGroup",
-			ConvertMode: ve.RequestConvertIgnore,
+			ConvertMode: bp.RequestConvertIgnore,
 			SdkParam: &map[string]interface{}{
 				"ServerGroupId": resourceData.Id(),
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				//删除 Server Group
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
-			CallError: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall, baseErr error) error {
+			CallError: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall, baseErr error) error {
 				//出现错误后重试
 				return resource.Retry(15*time.Minute, func() *resource.RetryError {
 					_, callErr := s.ReadResource(d, "")
 					if callErr != nil {
-						if ve.ResourceNotFoundError(callErr) {
+						if bp.ResourceNotFoundError(callErr) {
 							return nil
 						} else {
 							return resource.NonRetryableError(fmt.Errorf("error on  reading server group on delete %q, %w", d.Id(), callErr))
@@ -221,7 +252,7 @@ func (s *VestackServerGroupService) RemoveResource(resourceData *schema.Resource
 					return resource.RetryableError(callErr)
 				})
 			},
-			ExtraRefresh: map[ve.ResourceService]*ve.StateRefresh{
+			ExtraRefresh: map[bp.ResourceService]*bp.StateRefresh{
 				clb.NewClbService(s.Client): {
 					Target:     []string{"Active", "Inactive"},
 					Timeout:    resourceData.Timeout(schema.TimeoutCreate),
@@ -233,21 +264,30 @@ func (s *VestackServerGroupService) RemoveResource(resourceData *schema.Resource
 			},
 		},
 	}
-	return []ve.Callback{callback}
+	return []bp.Callback{callback}
 }
 
-func (s *VestackServerGroupService) DatasourceResources(*schema.ResourceData, *schema.Resource) ve.DataSourceInfo {
-	return ve.DataSourceInfo{
-		RequestConverts: map[string]ve.RequestConvert{
+func (s *VestackServerGroupService) DatasourceResources(*schema.ResourceData, *schema.Resource) bp.DataSourceInfo {
+	return bp.DataSourceInfo{
+		RequestConverts: map[string]bp.RequestConvert{
 			"ids": {
 				TargetField: "ServerGroupIds",
-				ConvertType: ve.ConvertWithN,
+				ConvertType: bp.ConvertWithN,
+			},
+			"tags": {
+				TargetField: "TagFilters",
+				ConvertType: bp.ConvertListN,
+				NextLevelConvert: map[string]bp.RequestConvert{
+					"value": {
+						TargetField: "Values.1",
+					},
+				},
 			},
 		},
 		NameField:    "ServerGroupName",
 		IdField:      "ServerGroupId",
 		CollectField: "groups",
-		ResponseConverts: map[string]ve.ResponseConvert{
+		ResponseConverts: map[string]bp.ResponseConvert{
 			"ServerGroupId": {
 				TargetField: "id",
 				KeepDefault: true,
@@ -273,19 +313,40 @@ func (s *VestackServerGroupService) queryLoadBalancerId(serverGroupId string) (s
 	if err != nil {
 		return "", err
 	}
-	clbId, err := ve.ObtainSdkValue("Result.LoadBalancerId", *serverGroupResp)
+	clbId, err := bp.ObtainSdkValue("Result.LoadBalancerId", *serverGroupResp)
 	if err != nil {
 		return "", err
 	}
 	return clbId.(string), nil
 }
 
-func getUniversalInfo(actionName string) ve.UniversalInfo {
-	return ve.UniversalInfo{
+func removeSystemTags(data []interface{}) ([]interface{}, error) {
+	var (
+		ok      bool
+		result  map[string]interface{}
+		results []interface{}
+		tags    []interface{}
+	)
+	for _, d := range data {
+		if result, ok = d.(map[string]interface{}); !ok {
+			return results, errors.New("The elements in data are not map ")
+		}
+		tags, ok = result["Tags"].([]interface{})
+		if ok {
+			tags = bp.FilterSystemTags(tags)
+			result["Tags"] = tags
+		}
+		results = append(results, result)
+	}
+	return results, nil
+}
+
+func getUniversalInfo(actionName string) bp.UniversalInfo {
+	return bp.UniversalInfo{
 		ServiceName: "clb",
 		Version:     "2020-04-01",
-		HttpMethod:  ve.GET,
-		ContentType: ve.Default,
+		HttpMethod:  bp.GET,
+		ContentType: bp.Default,
 		Action:      actionName,
 	}
 }

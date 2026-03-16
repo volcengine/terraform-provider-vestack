@@ -68,6 +68,7 @@ func DataSourceVestackVolumes() *schema.Resource {
 				ValidateFunc: validation.StringInSlice([]string{"system", "data"}, false),
 				Description:  "The Kind of Volume.",
 			},
+			"tags": bp.TagsSchema(),
 			"volumes": {
 				Description: "The collection of Volume query.",
 				Type:        schema.TypeList,
@@ -154,8 +155,72 @@ func DataSourceVestackVolumes() *schema.Resource {
 							Type:     schema.TypeBool,
 							Computed: true,
 						},
+						"baseline_performance": {
+							Type:        schema.TypeList,
+							Computed:    true,
+							Description: "The baseline performance of the volume.",
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"iops": {
+										Type:        schema.TypeInt,
+										Computed:    true,
+										Description: "The baseline IOPS performance size for volume.",
+									},
+									"throughput": {
+										Type:        schema.TypeInt,
+										Computed:    true,
+										Description: "The baseline Throughput performance size for volume. Unit: MB/s.",
+									},
+								},
+							},
+						},
+						"total_performance": {
+							Type:        schema.TypeList,
+							Computed:    true,
+							Description: "The baseline performance of the volume.",
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"iops": {
+										Type:        schema.TypeInt,
+										Computed:    true,
+										Description: "The total IOPS performance size for volume.",
+									},
+									"throughput": {
+										Type:        schema.TypeInt,
+										Computed:    true,
+										Description: "The total Throughput performance size for volume. Unit: MB/s.",
+									},
+								},
+							},
+						},
+						"extra_performance": {
+							Type:        schema.TypeList,
+							Computed:    true,
+							Description: "The extra performance of the volume.",
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"extra_performance_type_id": {
+										Type:        schema.TypeString,
+										Computed:    true,
+										Description: "The type of extra performance for volume.",
+									},
+									"iops": {
+										Type:        schema.TypeInt,
+										Computed:    true,
+										Description: "The extra IOPS performance size for volume.",
+									},
+									"throughput": {
+										Type:        schema.TypeInt,
+										Computed:    true,
+										Description: "The extra Throughput performance size for volume. Unit: MB/s.",
+									},
+								},
+							},
+						},
+						"tags": bp.TagsSchemaComputed(),
 					},
-				}},
+				},
+			},
 		},
 	}
 }

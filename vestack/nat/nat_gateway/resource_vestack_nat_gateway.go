@@ -6,7 +6,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 /*
@@ -46,11 +46,19 @@ func ResourceVestackNatGateway() *schema.Resource {
 				ForceNew:    true,
 				Description: "The ID of the Subnet.",
 			},
-			"spec": {
+			"network_type": {
 				Type:        schema.TypeString,
 				Optional:    true,
-				Computed:    true,
-				Description: "The specification of the NatGateway. Optional choice contains `Small`(default), `Medium`, `Large` or leave blank.",
+				ForceNew:    true,
+				Default:     "internet",
+				Description: "The network type of the NatGateway. Valid values are `internet` and `intranet`. Default value is `internet`.",
+			},
+			"spec": {
+				Type:     schema.TypeString,
+				Optional: true,
+				Computed: true,
+				Description: "The specification of the NatGateway. Optional choice contains `Small`(default), `Medium`, `Large` or leave blank.\n" +
+					"When the `billing_type` is `PostPaidByUsage`, this field should not be specified.",
 			},
 			"nat_gateway_name": {
 				Type:        schema.TypeString,
@@ -63,11 +71,12 @@ func ResourceVestackNatGateway() *schema.Resource {
 				Description: "The description of the NatGateway.",
 			},
 			"billing_type": {
-				Type:        schema.TypeString,
-				Optional:    true,
-				ForceNew:    true,
-				Default:     "PostPaid",
-				Description: "The billing type of the NatGateway, the value is `PostPaid` or `PrePaid`.",
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+				Default:  "PostPaid",
+				Description: "The billing type of the NatGateway, the value is `PostPaid` or `PrePaid` or `PostPaidByUsage`. Default value is `PostPaid`.\n" +
+					"When the `network_type` is `intranet`, the billing type must be `PostPaidByUsage`.",
 			},
 			//"period_unit": {
 			//	Type:     schema.TypeString,
@@ -97,7 +106,7 @@ func ResourceVestackNatGateway() *schema.Resource {
 				Description: "The period of the NatGateway, the valid value range in 1~9 or 12 or 24 or 36. Default value is 12. The period unit defaults to `Month`." +
 					"This field is only effective when creating a PrePaid NatGateway. When importing resources, this attribute will not be imported. If this attribute is set, please use lifecycle and ignore_changes ignore changes in fields.",
 			},
-			"tags": ve.TagsSchema(),
+			"tags": bp.TagsSchema(),
 			"project_name": {
 				Type:        schema.TypeString,
 				Optional:    true,
@@ -109,8 +118,8 @@ func ResourceVestackNatGateway() *schema.Resource {
 }
 
 func resourceVestackNatGatewayCreate(d *schema.ResourceData, meta interface{}) (err error) {
-	natGatewayService := NewNatGatewayService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Create(natGatewayService, d, ResourceVestackNatGateway())
+	natGatewayService := NewNatGatewayService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Create(natGatewayService, d, ResourceVestackNatGateway())
 	if err != nil {
 		return fmt.Errorf("error on creating nat gateway  %q, %w", d.Id(), err)
 	}
@@ -118,8 +127,8 @@ func resourceVestackNatGatewayCreate(d *schema.ResourceData, meta interface{}) (
 }
 
 func resourceVestackNatGatewayRead(d *schema.ResourceData, meta interface{}) (err error) {
-	natGatewayService := NewNatGatewayService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Read(natGatewayService, d, ResourceVestackNatGateway())
+	natGatewayService := NewNatGatewayService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Read(natGatewayService, d, ResourceVestackNatGateway())
 	if err != nil {
 		return fmt.Errorf("error on reading nat gateway %q, %w", d.Id(), err)
 	}
@@ -127,8 +136,8 @@ func resourceVestackNatGatewayRead(d *schema.ResourceData, meta interface{}) (er
 }
 
 func resourceVestackNatGatewayUpdate(d *schema.ResourceData, meta interface{}) (err error) {
-	natGatewayService := NewNatGatewayService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Update(natGatewayService, d, ResourceVestackNatGateway())
+	natGatewayService := NewNatGatewayService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Update(natGatewayService, d, ResourceVestackNatGateway())
 	if err != nil {
 		return fmt.Errorf("error on updating nat gateway  %q, %w", d.Id(), err)
 	}
@@ -136,8 +145,8 @@ func resourceVestackNatGatewayUpdate(d *schema.ResourceData, meta interface{}) (
 }
 
 func resourceVestackNatGatewayDelete(d *schema.ResourceData, meta interface{}) (err error) {
-	natGatewayService := NewNatGatewayService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Delete(natGatewayService, d, ResourceVestackNatGateway())
+	natGatewayService := NewNatGatewayService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Delete(natGatewayService, d, ResourceVestackNatGateway())
 	if err != nil {
 		return fmt.Errorf("error on deleting nat gateway %q, %w", d.Id(), err)
 	}

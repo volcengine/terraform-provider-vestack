@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 /*
@@ -62,14 +62,14 @@ func ResourceVestackCertificate() *schema.Resource {
 				ForceNew:    true,
 				Description: "The ProjectName of the Certificate.",
 			},
-			"tags": ve.TagsSchema(),
+			"tags": bp.TagsSchema(),
 		},
 	}
 }
 
 func resourceVestackCertificateCreate(d *schema.ResourceData, meta interface{}) (err error) {
-	certificateService := NewCertificateService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Create(certificateService, d, ResourceVestackCertificate())
+	certificateService := NewCertificateService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Create(certificateService, d, ResourceVestackCertificate())
 	if err != nil {
 		return fmt.Errorf("error on creating certificate  %q, %w", d.Id(), err)
 	}
@@ -77,8 +77,8 @@ func resourceVestackCertificateCreate(d *schema.ResourceData, meta interface{}) 
 }
 
 func resourceVestackCertificateRead(d *schema.ResourceData, meta interface{}) (err error) {
-	certificateService := NewCertificateService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Read(certificateService, d, ResourceVestackCertificate())
+	certificateService := NewCertificateService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Read(certificateService, d, ResourceVestackCertificate())
 	if err != nil {
 		return fmt.Errorf("error on reading certificate %q, %w", d.Id(), err)
 	}
@@ -86,8 +86,8 @@ func resourceVestackCertificateRead(d *schema.ResourceData, meta interface{}) (e
 }
 
 func resourceVestackCertificateUpdate(d *schema.ResourceData, meta interface{}) (err error) {
-	certificateService := NewCertificateService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Update(certificateService, d, ResourceVestackCertificate())
+	certificateService := NewCertificateService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Update(certificateService, d, ResourceVestackCertificate())
 	if err != nil {
 		return fmt.Errorf("error on updating certificate  %q, %w", d.Id(), err)
 	}
@@ -95,8 +95,8 @@ func resourceVestackCertificateUpdate(d *schema.ResourceData, meta interface{}) 
 }
 
 func resourceVestackCertificateDelete(d *schema.ResourceData, meta interface{}) (err error) {
-	certificateService := NewCertificateService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Delete(certificateService, d, ResourceVestackCertificate())
+	certificateService := NewCertificateService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Delete(certificateService, d, ResourceVestackCertificate())
 	if err != nil {
 		return fmt.Errorf("error on deleting certificate %q, %w", d.Id(), err)
 	}

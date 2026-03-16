@@ -217,6 +217,11 @@ func DataSourceVestackNodePools() *schema.Resource {
 							Computed:    true,
 							Description: "The login SshKeyPairName of NodeConfig.",
 						},
+						"pre_script": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "The PreScript of NodeConfig.",
+						},
 						"initialize_script": {
 							Type:        schema.TypeString,
 							Computed:    true,
@@ -225,8 +230,6 @@ func DataSourceVestackNodePools() *schema.Resource {
 						"system_volume": {
 							Type:     schema.TypeList,
 							Computed: true,
-							MaxItems: 1,
-							MinItems: 1,
 							Elem: &schema.Resource{
 								Schema: map[string]*schema.Schema{
 									"type": {
@@ -246,8 +249,6 @@ func DataSourceVestackNodePools() *schema.Resource {
 						"node_statistics": {
 							Type:     schema.TypeList,
 							Computed: true,
-							MaxItems: 1,
-							MinItems: 1,
 							Elem: &schema.Resource{
 								Schema: map[string]*schema.Schema{
 									"total_count": {
@@ -510,6 +511,40 @@ func DataSourceVestackNodePools() *schema.Resource {
 										Type:        schema.TypeString,
 										Computed:    true,
 										Description: "The Type of Tags.",
+									},
+								},
+							},
+						},
+						"management": {
+							Type:        schema.TypeList,
+							Computed:    true,
+							Description: "The Management Config of NodePool.",
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"enabled": {
+										Type:        schema.TypeBool,
+										Computed:    true,
+										Description: "Whether to enable the management function of the node pool. Default is `false`.",
+									},
+									"remedy_config": {
+										Type:        schema.TypeList,
+										Computed:    true,
+										Description: "The Remedy Config of NodePool.",
+										Elem: &schema.Resource{
+											Schema: map[string]*schema.Schema{
+												"enabled": {
+													Type:        schema.TypeBool,
+													Computed:    true,
+													Description: "Whether to enable the remedy function of the node pool.",
+												},
+												"id": {
+													Type:        schema.TypeString,
+													Optional:    true,
+													Computed:    true,
+													Description: "The ID of the remedy policy.",
+												},
+											},
+										},
 									},
 								},
 							},

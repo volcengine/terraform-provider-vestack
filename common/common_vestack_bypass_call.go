@@ -20,8 +20,8 @@ const (
 )
 
 type BypassSvc struct {
-	Session   *session.Session
-	endpoints map[string]string
+	Session        *session.Session
+	endpointSuffix map[string]string
 }
 
 type BypassSvcInfo struct {
@@ -35,10 +35,10 @@ type BypassSvcInfo struct {
 	Client      *client.Client
 }
 
-func NewBypassClient(session *session.Session, endpoints map[string]string) *BypassSvc {
+func NewBypassClient(session *session.Session, endpointSuffix map[string]string) *BypassSvc {
 	return &BypassSvc{
-		Session:   session,
-		endpoints: endpoints,
+		Session:        session,
+		endpointSuffix: endpointSuffix,
 	}
 }
 
@@ -77,7 +77,11 @@ func (u *BypassSvc) DoBypassSvcCall(info BypassSvcInfo, input *map[string]interf
 
 	if len(info.Path) > 0 {
 		for _, v := range info.Path {
-			httpPath = httpPath + "/" + v
+			if strings.HasPrefix(v, "?") {
+				httpPath = httpPath + v
+			} else {
+				httpPath = httpPath + "/" + v
+			}
 		}
 	}
 

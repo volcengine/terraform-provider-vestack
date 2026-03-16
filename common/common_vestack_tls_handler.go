@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"strings"
 
 	"github.com/volcengine/volcengine-go-sdk/volcengine/client"
 	"github.com/volcengine/volcengine-go-sdk/volcengine/client/metadata"
@@ -20,20 +19,20 @@ func (u *BypassSvc) NewTlsClient() *client.Client {
 	svc := "TLS"
 	config := u.Session.ClientConfig(svc)
 	var (
-		endpoint string
+		endpoint       string
+		endpointSuffix string
 	)
-	format := fmt.Sprintf("tls-%s.volces.com", config.SigningRegion)
-
-	if len(u.endpoints) > 0 {
-		if end, ok := u.endpoints[strings.ToLower(svc)]; ok {
-			format = end
+	endpointSuffix = VestackBypassEndpointSuffix
+	if len(u.endpointSuffix) > 0 {
+		if suffix, ok := u.endpointSuffix[svc]; ok {
+			endpointSuffix = suffix
 		}
 	}
-	format = "%s://" + format
+
 	if config.Config.DisableSSL != nil && *config.Config.DisableSSL {
-		endpoint = fmt.Sprintf(format, "http")
+		endpoint = fmt.Sprintf("%s://tls-%s.%s", "http", config.SigningRegion, endpointSuffix)
 	} else {
-		endpoint = fmt.Sprintf(format, "https")
+		endpoint = fmt.Sprintf("%s://tls-%s.%s", "https", config.SigningRegion, endpointSuffix)
 	}
 
 	c := client.New(
@@ -49,7 +48,7 @@ func (u *BypassSvc) NewTlsClient() *client.Client {
 	)
 	c.Handlers.Build.PushBackNamed(corehandlers.SDKVersionUserAgentHandler)
 	c.Handlers.Build.PushBackNamed(corehandlers.AddHostExecEnvUserAgentHandler)
-	c.Handlers.Sign.PushBackNamed(volc.SignRequestHandler)
+	c.Handlers.Sign.PushBackNamed(bp.SignRequestHandler)
 	c.Handlers.Build.PushBackNamed(bypassBuildHandler)
 	c.Handlers.Unmarshal.PushBackNamed(bypassUnmarshalHandler)
 	c.Handlers.UnmarshalError.PushBackNamed(tlsUnmarshalErrorHandler)
@@ -68,7 +67,7 @@ func tlsUnmarshalError(r *request.Request) {
 	if r.DataFilled() {
 		body, err := ioutil.ReadAll(r.HTTPResponse.Body)
 		if err != nil {
-			fmt.Printf("read volcenginebody err, %v\n", err)
+			fmt.Printf("read vestackbody err, %v\n", err)
 			r.Error = err
 			return
 		}
@@ -78,16 +77,16 @@ func tlsUnmarshalError(r *request.Request) {
 			r.Error = err
 			return
 		}
-		r.Error = volcengineerr.NewRequestFailure(
-			volcengineerr.New(tos.ErrorCode, tos.ErrorMessage, nil),
+		r.Error = vestackerr.NewRequestFailure(
+			vestackerr.New(tos.ErrorCode, tos.ErrorMessage, nil),
 			r.HTTPResponse.StatusCode,
 			r.HTTPResponse.Header.Get("X-Tls-Requestid"),
 		)
 
 		return
 	} else {
-		r.Error = volcengineerr.NewRequestFailure(
-			volcengineerr.New("ServiceUnavailableException", "service is unavailable", nil),
+		r.Error = vestackerr.NewRequestFailure(
+			vestackerr.New("ServiceUnavailableException", "service is unavailable", nil),
 			r.HTTPResponse.StatusCode,
 			r.RequestID,
 		)

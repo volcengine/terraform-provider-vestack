@@ -35,7 +35,7 @@ func (s *VestackEcsInvocationService) ReadResources(m map[string]interface{}) (d
 		results interface{}
 		ok      bool
 	)
-	return bp.WithPageNumberQuery(m, "PageSize", "PageNumber", 20, 1, func(condition map[string]interface{}) ([]interface{}, error) {
+	return bp.WithPageNumberQuery(m, "PageSize", "PageNumber", 100, 1, func(condition map[string]interface{}) ([]interface{}, error) {
 		action := "DescribeInvocations"
 		bytes, _ := json.Marshal(condition)
 		logger.Debug(logger.ReqFormat, action, string(bytes))
@@ -75,6 +75,9 @@ func (s *VestackEcsInvocationService) ReadResources(m map[string]interface{}) (d
 			}
 			logger.Debug(logger.ReqFormat, action, req)
 			resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), &req)
+			if err != nil {
+				return data, err
+			}
 			logger.Debug(logger.RespFormat, action, req, resp)
 			results, err := bp.ObtainSdkValue("Result.InvocationInstances", *resp)
 			if err != nil {
@@ -126,6 +129,13 @@ func (s *VestackEcsInvocationService) ReadResource(resourceData *schema.Resource
 	}
 	if len(data) == 0 {
 		return data, fmt.Errorf("ecs invocation %s is not exist ", id)
+	}
+
+	// 处理 parameters
+	delete(data, "Parameters")
+	if parameters, exist := resourceData.GetOk("parameters"); exist {
+		parametersArr := parameters.(*schema.Set).List()
+		data["Parameters"] = parametersArr
 	}
 
 	// 处理 launch_time、recurrence_end_time 传参与查询结果不一致的问题
@@ -213,6 +223,11 @@ func (s *VestackEcsInvocationService) RefreshResourceState(resourceData *schema.
 			if err != nil {
 				return nil, "", err
 			}
+
+			// 定时和周期任务直接退出
+			if mode := resourceData.Get("repeat_mode"); mode.(string) != "Once" {
+				return demo, "Success", nil
+			}
 			return demo, status.(string), err
 		},
 	}
@@ -225,7 +240,7 @@ func (VestackEcsInvocationService) WithResourceResponseHandlers(invocation map[s
 	return []bp.ResourceResponseHandler{handler}
 }
 
-func (s *VestackEcsInvocationService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
+func (s *VestackEcsInvocationService) CreateResource(resourceData *schema.ResourceData, r *schema.Resource) []bp.Callback {
 	callback := bp.Callback{
 		Call: bp.SdkCall{
 			Action:      "InvokeCommand",
@@ -236,11 +251,50 @@ func (s *VestackEcsInvocationService) CreateResource(resourceData *schema.Resour
 					TargetField: "InstanceIds",
 					ConvertType: bp.ConvertWithN,
 				},
+				"parameters": {
+					Ignore: true,
+				},
+				"tags": {
+					TargetField: "Tags",
+					ConvertType: bp.ConvertListN,
+				},
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
-				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
-				resp, err := s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
-				logger.Debug(logger.RespFormat, call.Action, resp, err)
+			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+				if parameters, ok := d.GetOk("parameters"); ok {
+					parametersArr := parameters.(*schema.Set).List()
+					if len(parametersArr) == 0 {
+						return true, nil
+					}
+					allParams := make([]string, 0)
+					for _, p := range parametersArr {
+						param, ok := p.(map[string]interface{})
+						if !ok {
+							return false, fmt.Errorf("parameters value is not map")
+						}
+						paramStr := fmt.Sprintf("\"%v\":\"%v\"", param["name"], param["value"])
+						allParams = append(allParams, paramStr)
+					}
+					(*call.SdkParam)["Parameters"] = fmt.Sprintf("{%v}", strings.Join(allParams, ","))
+				}
+				return true, nil
+			},
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (resp *map[string]interface{}, err error) {
+				if err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+					logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
+					resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
+					logger.Debug(logger.RespFormat, call.Action, resp, err)
+					if err != nil {
+						errMessage := err.Error()
+						if strings.Contains(errMessage, "InvalidInstanceId.Unregister") {
+							return resource.RetryableError(err)
+						} else {
+							return resource.NonRetryableError(err)
+						}
+					}
+					return nil
+				}); err != nil {
+					return nil, err
+				}
 				return resp, err
 			},
 			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
@@ -248,13 +302,23 @@ func (s *VestackEcsInvocationService) CreateResource(resourceData *schema.Resour
 				d.SetId(id.(string))
 				return nil
 			},
+			Refresh: &bp.StateRefresh{
+				Target:  []string{"Scheduled", "Success", "Failed", "Stopped", "PartialFailed", "Finished"},
+				Timeout: resourceData.Timeout(schema.TimeoutCreate),
+			},
 		},
 	}
 	return []bp.Callback{callback}
 }
 
 func (s *VestackEcsInvocationService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
-	return []bp.Callback{}
+	var callbacks []bp.Callback
+
+	// 更新Tags
+	setResourceTagsCallbacks := bp.SetResourceTags(s.Client, "TagResources", "UntagResources", "invocation", resourceData, getUniversalInfo)
+	callbacks = append(callbacks, setResourceTagsCallbacks...)
+
+	return callbacks
 }
 
 func (s *VestackEcsInvocationService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []bp.Callback {
@@ -279,10 +343,6 @@ func (s *VestackEcsInvocationService) RemoveResource(resourceData *schema.Resour
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
-			},
-			Refresh: &bp.StateRefresh{
-				Target:  []string{"Stopped"},
-				Timeout: resourceData.Timeout(schema.TimeoutDelete),
 			},
 		},
 	}
@@ -309,6 +369,15 @@ func (s *VestackEcsInvocationService) DatasourceResources(*schema.ResourceData, 
 					return status
 				},
 			},
+			"tags": {
+				TargetField: "TagFilters",
+				ConvertType: bp.ConvertListN,
+				NextLevelConvert: map[string]bp.RequestConvert{
+					"value": {
+						TargetField: "Values.1",
+					},
+				},
+			},
 		},
 		NameField:    "InvocationName",
 		IdField:      "InvocationId",
@@ -324,6 +393,15 @@ func (s *VestackEcsInvocationService) DatasourceResources(*schema.ResourceData, 
 
 func (s *VestackEcsInvocationService) ReadResourceId(id string) string {
 	return id
+}
+
+func (s *VestackEcsInvocationService) ProjectTrn() *bp.ProjectTrn {
+	return &bp.ProjectTrn{
+		ServiceName:          "ecs",
+		ResourceType:         "invocation",
+		ProjectResponseField: "ProjectName",
+		ProjectSchemaField:   "project_name",
+	}
 }
 
 func getUniversalInfo(actionName string) bp.UniversalInfo {

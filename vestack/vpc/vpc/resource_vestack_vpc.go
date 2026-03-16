@@ -68,12 +68,6 @@ func ResourceVestackVpc() *schema.Resource {
 				Computed:    true,
 				Description: "Specifies whether to enable the IPv6 CIDR block of the VPC.",
 			},
-			"ipv6_cidr_block_type": {
-				Type:        schema.TypeString,
-				Optional:    true,
-				Computed:    true,
-				Description: "The IPv6 CIDR block type of the VPC..",
-			},
 			"ipv6_cidr_block": {
 				Type:     schema.TypeString,
 				Optional: true,
@@ -87,10 +81,9 @@ func ResourceVestackVpc() *schema.Resource {
 				Description: "The IPv6 CIDR block of the VPC.",
 			},
 			"project_name": {
-				Type:     schema.TypeString,
-				Optional: true,
-				Computed: true,
-				//ForceNew:    true,
+				Type:        schema.TypeString,
+				Optional:    true,
+				Computed:    true,
 				Description: "The ProjectName of the VPC.",
 			},
 			"tags": bp.TagsSchema(),
@@ -103,6 +96,22 @@ func ResourceVestackVpc() *schema.Resource {
 				Type:        schema.TypeString,
 				Computed:    true,
 				Description: "Creation time of VPC.",
+			},
+			"secondary_cidr_blocks": {
+				Type:     schema.TypeList,
+				Computed: true,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
+				Description: "The secondary cidr block list of VPC.",
+			},
+			"user_cidr_blocks": {
+				Type:     schema.TypeList,
+				Computed: true,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
+				Description: "The user cidr block list of VPC.",
 			},
 		},
 	}

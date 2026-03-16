@@ -9,22 +9,22 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 	"github.com/volcengine/terraform-provider-vestack/logger"
 	"github.com/volcengine/terraform-provider-vestack/vestack/clb/acl"
 )
 
 type VestackAclEntryService struct {
-	Client *ve.SdkClient
+	Client *bp.SdkClient
 }
 
-func NewAclEntryService(c *ve.SdkClient) *VestackAclEntryService {
+func NewAclEntryService(c *bp.SdkClient) *VestackAclEntryService {
 	return &VestackAclEntryService{
 		Client: c,
 	}
 }
 
-func (s *VestackAclEntryService) GetClient() *ve.SdkClient {
+func (s *VestackAclEntryService) GetClient() *bp.SdkClient {
 	return s.Client
 }
 
@@ -34,7 +34,7 @@ func (s *VestackAclEntryService) ReadResources(condition map[string]interface{})
 		res           = make([]interface{}, 0)
 	)
 
-	aclEntries, err := ve.WithSimpleQuery(condition, func(m map[string]interface{}) ([]interface{}, error) {
+	aclEntries, err := bp.WithSimpleQuery(condition, func(m map[string]interface{}) ([]interface{}, error) {
 		var (
 			resp    *map[string]interface{}
 			err     error
@@ -54,7 +54,7 @@ func (s *VestackAclEntryService) ReadResources(condition map[string]interface{})
 			}
 		}
 
-		results, err = ve.ObtainSdkValue("Result.AclEntries", *resp)
+		results, err = bp.ObtainSdkValue("Result.AclEntries", *resp)
 		if err != nil {
 			return []interface{}{}, err
 		}
@@ -132,30 +132,30 @@ func (s *VestackAclEntryService) RefreshResourceState(resourceData *schema.Resou
 	return nil
 }
 
-func (VestackAclEntryService) WithResourceResponseHandlers(aclEntry map[string]interface{}) []ve.ResourceResponseHandler {
-	handler := func() (map[string]interface{}, map[string]ve.ResponseConvert, error) {
+func (VestackAclEntryService) WithResourceResponseHandlers(aclEntry map[string]interface{}) []bp.ResourceResponseHandler {
+	handler := func() (map[string]interface{}, map[string]bp.ResponseConvert, error) {
 		return aclEntry, nil, nil
 	}
-	return []ve.ResourceResponseHandler{handler}
+	return []bp.ResourceResponseHandler{handler}
 
 }
 
-func (s *VestackAclEntryService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []ve.Callback {
-	callback := ve.Callback{
-		Call: ve.SdkCall{
+func (s *VestackAclEntryService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
+	callback := bp.Callback{
+		Call: bp.SdkCall{
 			Action:      "AddAclEntries",
-			ConvertMode: ve.RequestConvertAll,
-			BeforeCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (bool, error) {
+			ConvertMode: bp.RequestConvertAll,
+			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 				(*call.SdkParam)["AclId"] = d.Get("acl_id")
 				(*call.SdkParam)["AclEntries.1.Entry"] = d.Get("entry")
 				(*call.SdkParam)["AclEntries.1.Description"] = d.Get("description")
 				return true, nil
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
-			AfterCall: func(d *schema.ResourceData, client *ve.SdkClient, resp *map[string]interface{}, call ve.SdkCall) error {
+			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 				id := fmt.Sprintf("%s:%s", d.Get("acl_id"), d.Get("entry"))
 				d.SetId(id)
 				return nil
@@ -163,7 +163,7 @@ func (s *VestackAclEntryService) CreateResource(resourceData *schema.ResourceDat
 			LockId: func(d *schema.ResourceData) string {
 				return d.Get("acl_id").(string)
 			},
-			ExtraRefresh: map[ve.ResourceService]*ve.StateRefresh{
+			ExtraRefresh: map[bp.ResourceService]*bp.StateRefresh{
 				acl.NewAclService(s.Client): {
 					Target:     []string{"Active"},
 					Timeout:    resourceData.Timeout(schema.TimeoutCreate),
@@ -172,20 +172,20 @@ func (s *VestackAclEntryService) CreateResource(resourceData *schema.ResourceDat
 			},
 		},
 	}
-	return []ve.Callback{callback}
+	return []bp.Callback{callback}
 
 }
 
-func (s *VestackAclEntryService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []ve.Callback {
-	return []ve.Callback{}
+func (s *VestackAclEntryService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
+	return []bp.Callback{}
 }
 
-func (s *VestackAclEntryService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []ve.Callback {
-	callback := ve.Callback{
-		Call: ve.SdkCall{
+func (s *VestackAclEntryService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []bp.Callback {
+	callback := bp.Callback{
+		Call: bp.SdkCall{
 			Action:      "RemoveAclEntries",
-			ConvertMode: ve.RequestConvertIgnore,
-			BeforeCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (bool, error) {
+			ConvertMode: bp.RequestConvertIgnore,
+			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 				tmpId := d.Id()
 				aclEntryId := strings.Split(tmpId, ":")
 				if len(aclEntryId) != 2 {
@@ -195,16 +195,16 @@ func (s *VestackAclEntryService) RemoveResource(resourceData *schema.ResourceDat
 				(*call.SdkParam)["Entries.1"] = aclEntryId[1]
 				return true, nil
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
-			CallError: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall, baseErr error) error {
+			CallError: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall, baseErr error) error {
 				//出现错误后重试
 				return resource.Retry(15*time.Minute, func() *resource.RetryError {
 					_, callErr := s.ReadResource(d, "")
 					if callErr != nil {
-						if ve.ResourceNotFoundError(callErr) {
+						if bp.ResourceNotFoundError(callErr) {
 							return nil
 						} else {
 							return resource.NonRetryableError(fmt.Errorf("error on  reading acl entry on delete %q, %w", d.Id(), callErr))
@@ -220,7 +220,7 @@ func (s *VestackAclEntryService) RemoveResource(resourceData *schema.ResourceDat
 			LockId: func(d *schema.ResourceData) string {
 				return d.Get("acl_id").(string)
 			},
-			ExtraRefresh: map[ve.ResourceService]*ve.StateRefresh{
+			ExtraRefresh: map[bp.ResourceService]*bp.StateRefresh{
 				acl.NewAclService(s.Client): {
 					Target:     []string{"Active"},
 					Timeout:    resourceData.Timeout(schema.TimeoutCreate),
@@ -229,23 +229,23 @@ func (s *VestackAclEntryService) RemoveResource(resourceData *schema.ResourceDat
 			},
 		},
 	}
-	return []ve.Callback{callback}
+	return []bp.Callback{callback}
 }
 
-func (s *VestackAclEntryService) DatasourceResources(*schema.ResourceData, *schema.Resource) ve.DataSourceInfo {
-	return ve.DataSourceInfo{}
+func (s *VestackAclEntryService) DatasourceResources(*schema.ResourceData, *schema.Resource) bp.DataSourceInfo {
+	return bp.DataSourceInfo{}
 }
 
 func (s *VestackAclEntryService) ReadResourceId(id string) string {
 	return id
 }
 
-func getUniversalInfo(actionName string) ve.UniversalInfo {
-	return ve.UniversalInfo{
+func getUniversalInfo(actionName string) bp.UniversalInfo {
+	return bp.UniversalInfo{
 		ServiceName: "clb",
 		Version:     "2020-04-01",
-		HttpMethod:  ve.GET,
-		ContentType: ve.Default,
+		HttpMethod:  bp.GET,
+		ContentType: bp.Default,
 		Action:      actionName,
 	}
 }

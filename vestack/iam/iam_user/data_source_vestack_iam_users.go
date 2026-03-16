@@ -2,7 +2,6 @@ package iam_user
 
 import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	bp "github.com/volcengine/terraform-provider-vestack/common"
 )
 
@@ -10,20 +9,10 @@ func DataSourceVestackIamUsers() *schema.Resource {
 	return &schema.Resource{
 		Read: dataSourceVestackIamUsersRead,
 		Schema: map[string]*schema.Schema{
-			"user_names": {
-				Type:     schema.TypeSet,
-				Optional: true,
-				Elem: &schema.Schema{
-					Type: schema.TypeString,
-				},
-				Set:         schema.HashString,
-				Description: "A list of user names.",
-			},
-			"name_regex": {
-				Type:         schema.TypeString,
-				Optional:     true,
-				ValidateFunc: validation.StringIsValidRegExp,
-				Description:  "A Name Regex of IAM.",
+			"query": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Description: "Fuzzy query. Can query by user name, display name or description.",
 			},
 
 			"output_file": {
@@ -42,6 +31,11 @@ func DataSourceVestackIamUsers() *schema.Resource {
 				Computed:    true,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
+						"user_id": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "The id of the user.",
+						},
 						"user_name": {
 							Type:        schema.TypeString,
 							Computed:    true,
@@ -60,13 +54,44 @@ func DataSourceVestackIamUsers() *schema.Resource {
 						"account_id": {
 							Type:        schema.TypeString,
 							Computed:    true,
-							Description: "The account id of the user.",
+							Description: "Main account ID to which the sub-user belongs.",
 						},
 						"trn": {
 							Type:        schema.TypeString,
 							Computed:    true,
 							Description: "The trn of the user.",
 						},
+						"display_name": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "The display name of the user.",
+						},
+						"mobile_phone": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "The mobile phone of the user.",
+						},
+						"mobile_phone_is_verify": {
+							Type:        schema.TypeBool,
+							Computed:    true,
+							Description: "Whether the phone number has been verified.",
+						},
+						"email": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "The email of the user.",
+						},
+						"email_is_verify": {
+							Type:        schema.TypeBool,
+							Computed:    true,
+							Description: "Whether the email has been verified.",
+						},
+						"description": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "The description of the user.",
+						},
+						"tags": bp.TagsSchema(),
 					},
 				},
 			},

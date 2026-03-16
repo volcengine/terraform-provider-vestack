@@ -9,22 +9,22 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 	"github.com/volcengine/terraform-provider-vestack/logger"
 	"github.com/volcengine/terraform-provider-vestack/vestack/clb/clb"
 )
 
 type VestackListenerService struct {
-	Client *ve.SdkClient
+	Client *bp.SdkClient
 }
 
-func NewListenerService(c *ve.SdkClient) *VestackListenerService {
+func NewListenerService(c *bp.SdkClient) *VestackListenerService {
 	return &VestackListenerService{
 		Client: c,
 	}
 }
 
-func (s *VestackListenerService) GetClient() *ve.SdkClient {
+func (s *VestackListenerService) GetClient() *bp.SdkClient {
 	return s.Client
 }
 
@@ -34,7 +34,7 @@ func (s *VestackListenerService) ReadResources(condition map[string]interface{})
 		results interface{}
 		ok      bool
 	)
-	return ve.WithPageNumberQuery(condition, "PageSize", "PageNumber", 20, 1, func(m map[string]interface{}) ([]interface{}, error) {
+	return bp.WithPageNumberQuery(condition, "PageSize", "PageNumber", 20, 1, func(m map[string]interface{}) ([]interface{}, error) {
 		action := "DescribeListeners"
 		logger.Debug(logger.ReqFormat, action, condition)
 		if condition == nil {
@@ -49,7 +49,7 @@ func (s *VestackListenerService) ReadResources(condition map[string]interface{})
 			}
 		}
 
-		results, err = ve.ObtainSdkValue("Result.Listeners", *resp)
+		results, err = bp.ObtainSdkValue("Result.Listeners", *resp)
 		if err != nil {
 			return data, err
 		}
@@ -59,6 +59,7 @@ func (s *VestackListenerService) ReadResources(condition map[string]interface{})
 		if data, ok = results.([]interface{}); !ok {
 			return data, errors.New("Result.Listeners is not Slice")
 		}
+		data, err = removeSystemTags(data)
 		return data, err
 	})
 }
@@ -97,19 +98,19 @@ func (s *VestackListenerService) ReadResource(resourceData *schema.ResourceData,
 
 	listenerAttrMap := make(map[string]interface{})
 
-	timeout, err := ve.ObtainSdkValue("Result.EstablishedTimeout", *listenerResp)
+	timeout, err := bp.ObtainSdkValue("Result.EstablishedTimeout", *listenerResp)
 	if err != nil {
 		return nil, err
 	}
-	desc, err := ve.ObtainSdkValue("Result.Description", *listenerResp)
+	desc, err := bp.ObtainSdkValue("Result.Description", *listenerResp)
 	if err != nil {
 		return nil, err
 	}
-	loadBalancerId, err := ve.ObtainSdkValue("Result.LoadBalancerId", *listenerResp)
+	loadBalancerId, err := bp.ObtainSdkValue("Result.LoadBalancerId", *listenerResp)
 	if err != nil {
 		return nil, err
 	}
-	scheduler, err := ve.ObtainSdkValue("Result.Scheduler", *listenerResp)
+	scheduler, err := bp.ObtainSdkValue("Result.Scheduler", *listenerResp)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +143,7 @@ func (s *VestackListenerService) RefreshResourceState(resourceData *schema.Resou
 			if err != nil {
 				return nil, "", err
 			}
-			status, err = ve.ObtainSdkValue("Status", demo)
+			status, err = bp.ObtainSdkValue("Status", demo)
 			if err != nil {
 				return nil, "", err
 			}
@@ -153,16 +154,23 @@ func (s *VestackListenerService) RefreshResourceState(resourceData *schema.Resou
 
 }
 
-func (*VestackListenerService) WithResourceResponseHandlers(listener map[string]interface{}) []ve.ResourceResponseHandler {
-	handler := func() (map[string]interface{}, map[string]ve.ResponseConvert, error) {
-		return listener, nil, nil
+func (*VestackListenerService) WithResourceResponseHandlers(listener map[string]interface{}) []bp.ResourceResponseHandler {
+	handler := func() (map[string]interface{}, map[string]bp.ResponseConvert, error) {
+		return listener, map[string]bp.ResponseConvert{
+			"CAEnabled": {
+				TargetField: "ca_enabled",
+			},
+			"CACertificateId": {
+				TargetField: "ca_certificate_id",
+			},
+		}, nil
 	}
-	return []ve.ResourceResponseHandler{handler}
+	return []bp.ResourceResponseHandler{handler}
 
 }
 
-func (s *VestackListenerService) refreshAclStatus() ve.CallFunc {
-	return func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) error {
+func (s *VestackListenerService) refreshAclStatus() bp.CallFunc {
+	return func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) error {
 		var aclIds []string
 		for k, v := range *call.SdkParam {
 			if strings.HasPrefix(k, "AclIds.") {
@@ -195,7 +203,7 @@ func (s *VestackListenerService) checkAcl(aclIds []string) error {
 
 		statusOK := true
 		aclIdMap := make(map[string]bool)
-		results, err := ve.ObtainSdkValue("Result.Acls", *resp)
+		results, err := bp.ObtainSdkValue("Result.Acls", *resp)
 		if err != nil {
 			return resource.NonRetryableError(err)
 		}
@@ -229,25 +237,42 @@ func (s *VestackListenerService) checkAcl(aclIds []string) error {
 	})
 }
 
-func (s *VestackListenerService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []ve.Callback {
-	callback := ve.Callback{
-		Call: ve.SdkCall{
+func (s *VestackListenerService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
+	callback := bp.Callback{
+		Call: bp.SdkCall{
 			Action:      "CreateListener",
-			ConvertMode: ve.RequestConvertAll,
-			Convert: map[string]ve.RequestConvert{
+			ConvertMode: bp.RequestConvertAll,
+			Convert: map[string]bp.RequestConvert{
 				"acl_ids": {
-					ConvertType: ve.ConvertWithN,
+					ConvertType: bp.ConvertWithN,
 				},
 				"health_check": {
-					ConvertType: ve.ConvertListUnique,
-					NextLevelConvert: map[string]ve.RequestConvert{
+					ConvertType: bp.ConvertListUnique,
+					NextLevelConvert: map[string]bp.RequestConvert{
 						"un_healthy_threshold": {
 							TargetField: "UnhealthyThreshold",
 						},
+						"uri": {
+							TargetField: "URI",
+						},
 					},
 				},
+				"port": {
+					TargetField: "Port",
+					ForceGet:    true,
+				},
+				"tags": {
+					TargetField: "Tags",
+					ConvertType: bp.ConvertListN,
+				},
+				"ca_enabled": {
+					TargetField: "CAEnabled",
+				},
+				"ca_certificate_id": {
+					TargetField: "CACertificateId",
+				},
 			},
-			BeforeCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (bool, error) {
+			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 				protocol := (*call.SdkParam)["Protocol"].(string)
 				// 1. established_timeout
 				if protocol == "HTTP" || protocol == "HTTPS" {
@@ -262,25 +287,63 @@ func (s *VestackListenerService) CreateResource(resourceData *schema.ResourceDat
 					return false, errors.New("certificate_id is only allowed for HTTPS")
 				}
 
+				// 3. connection_drain_timeout
+				if d.Get("connection_drain_enabled") == "on" {
+					timeout := d.Get("connection_drain_timeout").(int)
+					if timeout == 0 {
+						(*call.SdkParam)["ConnectionDrainTimeout"] = 0
+					}
+				}
+
+				// 4. Only Https and Http support
+				if protocol != "HTTP" && protocol != "HTTPS" {
+					httpSpecificParams := []string{
+						"ClientHeaderTimeout",
+						"ClientBodyTimeout",
+						"KeepaliveTimeout",
+						"ProxyConnectTimeout",
+						"ProxySendTimeout",
+						"ProxyReadTimeout",
+						"SendTimeout",
+					}
+					for _, param := range httpSpecificParams {
+						if _, ok := (*call.SdkParam)[param]; ok {
+							return false, fmt.Errorf("%s is only allowed for HTTP or HTTPS protocols", param)
+						}
+					}
+				}
+
+				// 5. Only Https support
+				if protocol != "HTTPS" {
+					httpsSpecificParams := []string{
+						"SecurityPolicyId",
+						"Http2Enabled",
+					}
+					for _, param := range httpsSpecificParams {
+						if _, ok := (*call.SdkParam)[param]; ok {
+							return false, fmt.Errorf("%s is only allowed for HTTPS protocols", param)
+						}
+					}
+				}
 				return true, nil
 			},
 			AfterLocked: s.refreshAclStatus(),
-			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				//创建listener
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
-			AfterCall: func(d *schema.ResourceData, client *ve.SdkClient, resp *map[string]interface{}, call ve.SdkCall) error {
+			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 				//注意 获取内容 这个地方不能是指针 需要转一次
-				id, _ := ve.ObtainSdkValue("Result.ListenerId", *resp)
+				id, _ := bp.ObtainSdkValue("Result.ListenerId", *resp)
 				d.SetId(id.(string))
 				return nil
 			},
-			Refresh: &ve.StateRefresh{
+			Refresh: &bp.StateRefresh{
 				Target:  []string{"Active", "Disabled"},
 				Timeout: resourceData.Timeout(schema.TimeoutCreate),
 			},
-			ExtraRefresh: map[ve.ResourceService]*ve.StateRefresh{
+			ExtraRefresh: map[bp.ResourceService]*bp.StateRefresh{
 				clb.NewClbService(s.Client): {
 					Target:     []string{"Active", "Inactive"},
 					Timeout:    resourceData.Timeout(schema.TimeoutCreate),
@@ -293,36 +356,45 @@ func (s *VestackListenerService) CreateResource(resourceData *schema.ResourceDat
 			},
 		},
 	}
-	return []ve.Callback{callback}
+	return []bp.Callback{callback}
 
 }
 
-func (s *VestackListenerService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []ve.Callback {
+func (s *VestackListenerService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
 	clbId, err := s.queryLoadBalancerId(resourceData.Id())
 	if err != nil {
-		return []ve.Callback{{
+		return []bp.Callback{{
 			Err: err,
 		}}
 	}
-
-	callback := ve.Callback{
-		Call: ve.SdkCall{
+	var callbacks []bp.Callback
+	callback := bp.Callback{
+		Call: bp.SdkCall{
 			Action:      "ModifyListenerAttributes",
-			ConvertMode: ve.RequestConvertAll,
-			Convert: map[string]ve.RequestConvert{
+			ConvertMode: bp.RequestConvertAll,
+			Convert: map[string]bp.RequestConvert{
 				"acl_ids": {
-					ConvertType: ve.ConvertWithN,
+					ConvertType: bp.ConvertWithN,
 				},
 				"health_check": {
-					ConvertType: ve.ConvertListUnique,
-					NextLevelConvert: map[string]ve.RequestConvert{
+					ConvertType: bp.ConvertListUnique,
+					NextLevelConvert: map[string]bp.RequestConvert{
 						"un_healthy_threshold": {
 							TargetField: "UnhealthyThreshold",
 						},
+						"uri": {
+							TargetField: "URI",
+						},
 					},
 				},
+				"ca_enabled": {
+					TargetField: "CAEnabled",
+				},
+				"ca_certificate_id": {
+					TargetField: "CACertificateId",
+				},
 			},
-			BeforeCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (bool, error) {
+			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 				protocol := d.Get("protocol").(string)
 				// 1. established_timeout
 				if protocol == "HTTP" || protocol == "HTTPS" {
@@ -335,6 +407,37 @@ func (s *VestackListenerService) ModifyResource(resourceData *schema.ResourceDat
 				// 2. certificate_id
 				if protocol != "HTTPS" && (*call.SdkParam)["CertificateId"] != nil {
 					return false, errors.New("certificate_id is only allowed for HTTPS")
+				}
+
+				// 3. Only Https and Http support
+				if protocol != "HTTP" && protocol != "HTTPS" {
+					httpSpecificParams := []string{
+						"ClientHeaderTimeout",
+						"ClientBodyTimeout",
+						"KeepaliveTimeout",
+						"ProxyConnectTimeout",
+						"ProxySendTimeout",
+						"ProxyReadTimeout",
+						"SendTimeout",
+					}
+					for _, param := range httpSpecificParams {
+						if _, ok := (*call.SdkParam)[param]; ok {
+							return false, fmt.Errorf("%s is only allowed for HTTP or HTTPS protocols", param)
+						}
+					}
+				}
+
+				// 4. Only Https support
+				if protocol != "HTTPS" {
+					httpsSpecificParams := []string{
+						"SecurityPolicyId",
+						"Http2Enabled",
+					}
+					for _, param := range httpsSpecificParams {
+						if _, ok := (*call.SdkParam)[param]; ok {
+							return false, fmt.Errorf("%s is only allowed for HTTPS protocols", param)
+						}
+					}
 				}
 
 				(*call.SdkParam)["ListenerId"] = d.Id()
@@ -355,16 +458,16 @@ func (s *VestackListenerService) ModifyResource(resourceData *schema.ResourceDat
 				return true, nil
 			},
 			AfterLocked: s.refreshAclStatus(),
-			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				//修改 listener 属性
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
-			Refresh: &ve.StateRefresh{
+			Refresh: &bp.StateRefresh{
 				Target:  []string{"Active", "Disabled"},
 				Timeout: resourceData.Timeout(schema.TimeoutCreate),
 			},
-			ExtraRefresh: map[ve.ResourceService]*ve.StateRefresh{
+			ExtraRefresh: map[bp.ResourceService]*bp.StateRefresh{
 				clb.NewClbService(s.Client): {
 					Target:     []string{"Active", "Inactive"},
 					Timeout:    resourceData.Timeout(schema.TimeoutCreate),
@@ -377,35 +480,40 @@ func (s *VestackListenerService) ModifyResource(resourceData *schema.ResourceDat
 			},
 		},
 	}
-	return []ve.Callback{callback}
+	callbacks = append(callbacks, callback)
+	// 更新tags
+	setResourceTagsCallbacks := bp.SetResourceTags(s.Client, "TagResources", "UntagResources", "listener", resourceData, getUniversalInfo)
+	callbacks = append(callbacks, setResourceTagsCallbacks...)
+
+	return callbacks
 }
 
-func (s *VestackListenerService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []ve.Callback {
+func (s *VestackListenerService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []bp.Callback {
 	clbId, err := s.queryLoadBalancerId(resourceData.Id())
 	if err != nil {
-		return []ve.Callback{{
+		return []bp.Callback{{
 			Err: err,
 		}}
 	}
 
-	callback := ve.Callback{
-		Call: ve.SdkCall{
+	callback := bp.Callback{
+		Call: bp.SdkCall{
 			Action:      "DeleteListener",
-			ConvertMode: ve.RequestConvertIgnore,
+			ConvertMode: bp.RequestConvertIgnore,
 			SdkParam: &map[string]interface{}{
 				"ListenerId": resourceData.Id(),
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				//删除 Listener
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
-			CallError: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall, baseErr error) error {
+			CallError: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall, baseErr error) error {
 				//出现错误后重试
 				return resource.Retry(15*time.Minute, func() *resource.RetryError {
 					_, callErr := s.ReadResource(d, "")
 					if callErr != nil {
-						if ve.ResourceNotFoundError(callErr) {
+						if bp.ResourceNotFoundError(callErr) {
 							return nil
 						} else {
 							return resource.NonRetryableError(fmt.Errorf("error on  reading listener on delete %q, %w", d.Id(), callErr))
@@ -418,7 +526,7 @@ func (s *VestackListenerService) RemoveResource(resourceData *schema.ResourceDat
 					return resource.RetryableError(callErr)
 				})
 			},
-			ExtraRefresh: map[ve.ResourceService]*ve.StateRefresh{
+			ExtraRefresh: map[bp.ResourceService]*bp.StateRefresh{
 				clb.NewClbService(s.Client): {
 					Target:     []string{"Active", "Inactive"},
 					Timeout:    resourceData.Timeout(schema.TimeoutCreate),
@@ -430,24 +538,42 @@ func (s *VestackListenerService) RemoveResource(resourceData *schema.ResourceDat
 			},
 		},
 	}
-	return []ve.Callback{callback}
+	return []bp.Callback{callback}
 }
 
-func (s *VestackListenerService) DatasourceResources(*schema.ResourceData, *schema.Resource) ve.DataSourceInfo {
-	return ve.DataSourceInfo{
-		RequestConverts: map[string]ve.RequestConvert{
+func (s *VestackListenerService) DatasourceResources(*schema.ResourceData, *schema.Resource) bp.DataSourceInfo {
+	return bp.DataSourceInfo{
+		RequestConverts: map[string]bp.RequestConvert{
 			"ids": {
 				TargetField: "ListenerIds",
-				ConvertType: ve.ConvertWithN,
+				ConvertType: bp.ConvertWithN,
+			},
+			"tags": {
+				TargetField: "TagFilters",
+				ConvertType: bp.ConvertListN,
+				NextLevelConvert: map[string]bp.RequestConvert{
+					"value": {
+						TargetField: "Values.1",
+					},
+				},
 			},
 		},
 		NameField:    "ListenerName",
 		IdField:      "ListenerId",
 		CollectField: "listeners",
-		ResponseConverts: map[string]ve.ResponseConvert{
+		ResponseConverts: map[string]bp.ResponseConvert{
 			"ListenerId": {
 				TargetField: "id",
 				KeepDefault: true,
+			},
+			"CAEnabled": {
+				TargetField: "ca_enabled",
+			},
+			"CACertificateId": {
+				TargetField: "ca_certificate_id",
+			},
+			"HealthCheck.Port": {
+				TargetField: "helth_check_port",
 			},
 			"HealthCheck.Enabled": {
 				TargetField: "health_check_enabled",
@@ -503,19 +629,40 @@ func (s *VestackListenerService) queryLoadBalancerId(listenerId string) (string,
 	if err != nil {
 		return "", err
 	}
-	clbId, err := ve.ObtainSdkValue("Result.LoadBalancerId", *serverGroupResp)
+	clbId, err := bp.ObtainSdkValue("Result.LoadBalancerId", *serverGroupResp)
 	if err != nil {
 		return "", err
 	}
 	return clbId.(string), nil
 }
 
-func getUniversalInfo(actionName string) ve.UniversalInfo {
-	return ve.UniversalInfo{
+func removeSystemTags(data []interface{}) ([]interface{}, error) {
+	var (
+		ok      bool
+		result  map[string]interface{}
+		results []interface{}
+		tags    []interface{}
+	)
+	for _, d := range data {
+		if result, ok = d.(map[string]interface{}); !ok {
+			return results, errors.New("The elements in data are not map ")
+		}
+		tags, ok = result["Tags"].([]interface{})
+		if ok {
+			tags = bp.FilterSystemTags(tags)
+			result["Tags"] = tags
+		}
+		results = append(results, result)
+	}
+	return results, nil
+}
+
+func getUniversalInfo(actionName string) bp.UniversalInfo {
+	return bp.UniversalInfo{
 		ServiceName: "clb",
 		Version:     "2020-04-01",
-		HttpMethod:  ve.GET,
-		ContentType: ve.Default,
+		HttpMethod:  bp.GET,
+		ContentType: bp.Default,
 		Action:      actionName,
 	}
 }

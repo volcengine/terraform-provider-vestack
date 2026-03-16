@@ -6,7 +6,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 /*
@@ -49,14 +49,14 @@ func ResourceVestackServerGroupServer() *schema.Resource {
 				Type:        schema.TypeString,
 				Required:    true,
 				ForceNew:    true,
-				Description: "The ID of ecs instance or the network card bound to ecs instance.",
+				Description: "The ID of ecs instance or the network card bound to ecs instance. When the `type` is `ip`, this parameter is an IP address.",
 			},
 			"type": {
 				Type:         schema.TypeString,
 				Required:     true,
 				ForceNew:     true,
-				Description:  "The type of instance. Optional choice contains `ecs`, `eni`.",
-				ValidateFunc: validation.StringInSlice([]string{"ecs", "eni"}, false),
+				Description:  "The type of instance. Optional choice contains `ecs`, `eni`, `ip`. When the `type` of `server_group_id` is `ip`, only `ip` is supported.",
+				ValidateFunc: validation.StringInSlice([]string{"ecs", "eni", "ip"}, false),
 			},
 			"weight": {
 				Type:        schema.TypeInt,
@@ -85,8 +85,8 @@ func ResourceVestackServerGroupServer() *schema.Resource {
 }
 
 func resourceVestackServerGroupServerCreate(d *schema.ResourceData, meta interface{}) (err error) {
-	serverGroupServerService := NewServerGroupServerService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Create(serverGroupServerService, d, ResourceVestackServerGroupServer())
+	serverGroupServerService := NewServerGroupServerService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Create(serverGroupServerService, d, ResourceVestackServerGroupServer())
 	if err != nil {
 		return fmt.Errorf("error on creating serverGroupServer  %q, %w", d.Id(), err)
 	}
@@ -94,8 +94,8 @@ func resourceVestackServerGroupServerCreate(d *schema.ResourceData, meta interfa
 }
 
 func resourceVestackServerGroupServerRead(d *schema.ResourceData, meta interface{}) (err error) {
-	serverGroupServerService := NewServerGroupServerService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Read(serverGroupServerService, d, ResourceVestackServerGroupServer())
+	serverGroupServerService := NewServerGroupServerService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Read(serverGroupServerService, d, ResourceVestackServerGroupServer())
 	if err != nil {
 		return fmt.Errorf("error on reading serverGroupServer %q, %w", d.Id(), err)
 	}
@@ -103,8 +103,8 @@ func resourceVestackServerGroupServerRead(d *schema.ResourceData, meta interface
 }
 
 func resourceVestackServerGroupServerUpdate(d *schema.ResourceData, meta interface{}) (err error) {
-	serverGroupServerService := NewServerGroupServerService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Update(serverGroupServerService, d, ResourceVestackServerGroupServer())
+	serverGroupServerService := NewServerGroupServerService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Update(serverGroupServerService, d, ResourceVestackServerGroupServer())
 	if err != nil {
 		return fmt.Errorf("error on updating serverGroupServer  %q, %w", d.Id(), err)
 	}
@@ -112,8 +112,8 @@ func resourceVestackServerGroupServerUpdate(d *schema.ResourceData, meta interfa
 }
 
 func resourceVestackServerGroupServerDelete(d *schema.ResourceData, meta interface{}) (err error) {
-	serverGroupServerService := NewServerGroupServerService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Delete(serverGroupServerService, d, ResourceVestackServerGroupServer())
+	serverGroupServerService := NewServerGroupServerService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Delete(serverGroupServerService, d, ResourceVestackServerGroupServer())
 	if err != nil {
 		return fmt.Errorf("error on deleting serverGroupServer %q, %w", d.Id(), err)
 	}

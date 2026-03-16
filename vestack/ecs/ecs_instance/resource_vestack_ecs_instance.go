@@ -2,10 +2,6 @@ package ecs_instance
 
 import (
 	"fmt"
-	"log"
-	"math"
-	"path"
-	"strconv"
 	"strings"
 	"time"
 
@@ -84,11 +80,14 @@ func ResourceVestackEcsInstance() *schema.Resource {
 				Description: "The password of ECS instance.",
 			},
 			"key_pair_name": {
-				Type:        schema.TypeString,
-				Optional:    true,
-				ForceNew:    true,
-				Computed:    true,
-				Description: "The ssh key name of ECS instance.",
+				Type:     schema.TypeString,
+				Optional: true,
+				//ForceNew: true,
+				//Computed: true,
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					return !d.HasChange("image_id")
+				},
+				Description: "The ssh key name of ECS instance. This field can be modified only when the `image_id` is modified.",
 			},
 			"keep_image_credential": {
 				Type:     schema.TypeBool,
@@ -116,10 +115,26 @@ func ResourceVestackEcsInstance() *schema.Resource {
 				ValidateFunc: validation.StringInSlice([]string{
 					"NoSpot",
 					"SpotAsPriceGo",
+					"SpotWithPriceLimit",
 				}, false),
 				Description: "The spot strategy will auto" +
 					"remove instance in some conditions.Please make sure you can maintain instance lifecycle before " +
-					"auto remove.The spot strategy of ECS instance, the value can be `NoSpot` or `SpotAsPriceGo`.",
+					"auto remove.The spot strategy of ECS instance, values:\n NoSpot (default): indicates creating a normal pay-as-you-go instance." +
+					"\nSpotAsPriceGo: spot instance with system automatically bidding and following the current market price." +
+					"\nSpotWithPriceLimit: spot instance with a set upper limit for bidding price.",
+			},
+			"spot_price_limit": {
+				Type:     schema.TypeFloat,
+				Optional: true,
+				ForceNew: true,
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					if d.Get("instance_charge_type").(string) == "PostPaid" && d.Get("spot_strategy").(string) == "SpotWithPriceLimit" {
+						return false
+					}
+					return true
+				},
+				Description: "The maximum hourly price for spot instances supports up to three decimal places. " +
+					"This parameter only takes effect when SpotStrategy=SpotWithPriceLimit.",
 			},
 			"user_data": {
 				Type:             schema.TypeString,
@@ -187,6 +202,15 @@ func ResourceVestackEcsInstance() *schema.Resource {
 				Description:      "The include data volumes flag of ECS instance.Only effective when change instance charge type.include_data_volumes.",
 			},
 
+			//"vpc_id": {
+			//	Type:     schema.TypeString,
+			//	Optional: true,
+			//	Computed: true,
+			//	DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+			//		return d.Id() == ""
+			//	},
+			//	Description: "The vpc ID of primary networkInterface. This field is only effective when modifying the instance.",
+			//},
 			"subnet_id": {
 				Type:        schema.TypeString,
 				Required:    true,
@@ -213,21 +237,75 @@ func ResourceVestackEcsInstance() *schema.Resource {
 			},
 
 			"primary_ip_address": {
-				Type:        schema.TypeString,
-				Computed:    true,
+				Type:     schema.TypeString,
+				Optional: true,
+				Computed: true,
+				ForceNew: true,
+				//DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+				//	return !d.HasChange("subnet_id")
+				//},
 				Description: "The private ip address of primary networkInterface.",
+			},
+
+			"eip_id": {
+				Type:          schema.TypeString,
+				Optional:      true,
+				ForceNew:      true,
+				ConflictsWith: []string{"eip_address"},
+				Description: "The id of an existing Available EIP which will be automatically assigned to this instance. \n" +
+					"It is not recommended to use this field, it is recommended to use `vestack_eip_associate` resource to bind EIP.",
+			},
+			"eip_address": {
+				Type:          schema.TypeList,
+				Optional:      true,
+				ForceNew:      true,
+				MaxItems:      1,
+				ConflictsWith: []string{"eip_id"},
+				Description: "The config of the eip which will be automatically created and assigned to this instance. `Prepaid` type eip cannot be created in this way, please use `vestack_eip_address`.\n" +
+					"When importing resources, this attribute will not be imported. If this attribute is set, please use lifecycle and ignore_changes ignore changes in fields.",
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"charge_type": {
+							Type:        schema.TypeString,
+							Optional:    true,
+							Default:     "PayByBandwidth",
+							ForceNew:    true,
+							Description: "The billing type of the EIP Address. Valid values: `PayByBandwidth`, `PayByTraffic`. Default is `PayByBandwidth`.",
+						},
+						"isp": {
+							Type:        schema.TypeString,
+							Optional:    true,
+							Default:     "BGP",
+							ForceNew:    true,
+							Description: "The ISP of the EIP. Valid values: `BGP`, `ChinaMobile`, `ChinaUnicom`, `ChinaTelecom`, `SingleLine_BGP`, `Static_BGP`.",
+						},
+						"bandwidth_package_id": {
+							Type:        schema.TypeString,
+							Optional:    true,
+							ForceNew:    true,
+							Description: "The id of the bandwidth package, indicates that the public IP address will be added to the bandwidth package.",
+						},
+						"bandwidth_mbps": {
+							Type:        schema.TypeInt,
+							Optional:    true,
+							Default:     1,
+							ForceNew:    true,
+							Description: "The peek bandwidth of the EIP. The value range in 1~500 for PostPaidByBandwidth, and 1~200 for PostPaidByTraffic. Default is 1.",
+						},
+					},
+				},
 			},
 
 			"system_volume_type": {
 				Type:        schema.TypeString,
-				Optional:    true,
+				Required:    true,
 				ForceNew:    true,
 				Description: "The type of system volume, the value is `PTSSD` or `ESSD_PL0` or `ESSD_PL1` or `ESSD_PL2` or `ESSD_FlexPL`.",
 			},
 
 			"system_volume_size": {
 				Type:     schema.TypeInt,
-				Optional: true,
+				Required: true,
 				Description: "The size of system volume. " +
 					"The value range of the system volume size is ESSD_PL0: 20~2048, ESSD_FlexPL: 20~2048, PTSSD: 10~500.",
 			},
@@ -239,10 +317,16 @@ func ResourceVestackEcsInstance() *schema.Resource {
 			},
 
 			"deployment_set_id": {
+				Type:     schema.TypeString,
+				Optional: true,
+				//Computed:    true,
+				Description: "The ID of Ecs Deployment Set. This field only used to associate a deployment set to the ECS instance. Setting this field to null means disassociating the instance from the deployment set. \n" +
+					"The current deployment set id of the ECS instance is the `deployment_set_id_computed` field.",
+			},
+			"deployment_set_id_computed": {
 				Type:        schema.TypeString,
-				Optional:    true,
 				Computed:    true,
-				Description: "The ID of Ecs Deployment Set.",
+				Description: "The ID of Ecs Deployment Set. Computed field.",
 			},
 
 			"ipv6_address_count": {
@@ -275,14 +359,47 @@ func ResourceVestackEcsInstance() *schema.Resource {
 				Computed:    true,
 				MaxItems:    1,
 				MinItems:    1,
-				Description: "The option of cpu.",
+				Description: "The option of cpu,only support for ebm.",
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
 						"threads_per_core": {
 							Type:        schema.TypeInt,
-							Required:    true,
+							Optional:    true,
+							Computed:    true,
 							ForceNew:    true,
-							Description: "The per core of threads.",
+							Description: "The per core of threads, only support for ebm. `1` indicates disabling hyper threading function.",
+							DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+								//暂时增加这个逻辑 在不包含ebm的情况下 忽略掉这个变化 目前这个方式比较hack 后续接口能力完善后改变一下
+								if it, ok := d.Get("instance_type").(string); ok {
+									its := strings.Split(it, ".")
+									if len(its) == 3 && !strings.Contains(strings.ToLower(its[1]), "ebm") {
+										return true
+									} else {
+										return false
+									}
+								} else {
+									return true
+								}
+							},
+						},
+						"numa_per_socket": {
+							Type:        schema.TypeInt,
+							Optional:    true,
+							ForceNew:    true,
+							Description: "The number of subnuma in socket, only support for ebm. `1` indicates disabling SNC/NPS function. When importing resources, this attribute will not be imported. If this attribute is set, please use lifecycle and ignore_changes ignore changes in fields.",
+							DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+								//暂时增加这个逻辑 在不包含ebm的情况下 忽略掉这个变化 目前这个方式比较hack 后续接口能力完善后改变一下
+								if it, ok := d.Get("instance_type").(string); ok {
+									its := strings.Split(it, ".")
+									if len(its) == 3 && !strings.Contains(strings.ToLower(its[1]), "ebm") {
+										return true
+									} else {
+										return false
+									}
+								} else {
+									return true
+								}
+							},
 						},
 					},
 				},
@@ -350,111 +467,44 @@ func ResourceVestackEcsInstance() *schema.Resource {
 						},
 						"primary_ip_address": {
 							Type:        schema.TypeString,
+							Optional:    true,
 							Computed:    true,
+							ForceNew:    true,
 							Description: "The private ip address of secondary networkInterface.",
 						},
 					},
 				},
 			},
+			"install_run_command_agent": {
+				Type:     schema.TypeBool,
+				Optional: true,
+				ForceNew: true,
+				Default:  false,
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					return d.Id() != ""
+				},
+				Description: "Whether to install the Run Command Agent. Default is false. This field is only effective when creating a new instance.",
+			},
 			"project_name": {
 				Type:        schema.TypeString,
 				Optional:    true,
+				Computed:    true,
 				Description: "The ProjectName of the ecs instance.",
 			},
 			"tags": bp.TagsSchema(),
-			"ha_strategy": {
-				Type:        schema.TypeString,
-				Optional:    true,
-				Computed:    true,
-				Description: "Whether the instance is turned on the high available mode, the value can be `offsite_rebuild` or empty string.",
-			},
-
-			"bms_system_disk_config": {
-				Type:     schema.TypeList,
-				Optional: true,
-				//MaxItems:    1,
-				//MinItems:    1,
-				Description: "For bms only",
-				//Set:         resourceBmsSystemDiskConfigHash,
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"capacity_gb": {
-							Type:        schema.TypeInt,
-							Required:    true,
-							Description: "The size of CapacityGB.",
-						},
-						"disk_type": {
-							Type:        schema.TypeString,
-							Required:    true,
-							Description: "The disk type.",
-							DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
-								log.Printf("[DEBUG] Comparing disk_type: old=%q, new=%q", old, new)
-								return strings.EqualFold(old, new)
-							},
-						},
-						"partitions": {
-							Type:        schema.TypeSet,
-							Optional:    true,
-							Description: "Partitions configuration for BMS system disk",
-							//Set:         resourceBmsPartitionHash,
-							Elem: &schema.Resource{
-								Schema: map[string]*schema.Schema{
-									"file_system": {
-										Type:        schema.TypeString,
-										Required:    true,
-										Description: "File system type of the partition.",
-									},
-									"mount_point": {
-										Type:        schema.TypeString,
-										Required:    true,
-										Description: "Mount point of the partition.",
-										DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
-											log.Printf("[DEBUG] Comparing mount_point: old=%q, new=%q", old, new)
-											return path.Clean(old) == path.Clean(new)
-										},
-									},
-									"size": {
-										Type:        schema.TypeInt,
-										Optional:    true,
-										Description: "Size of the partition.",
-										DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
-											oldVal, _ := strconv.Atoi(old)
-											newVal, _ := strconv.Atoi(new)
-											log.Printf("[DEBUG] Comparing size: old=%d, new=%d, diff=%.2f%%",
-												oldVal, newVal, 100*math.Abs(float64(oldVal-newVal))/float64(oldVal))
-											return math.Abs(float64(oldVal-newVal))/float64(oldVal) < 0.05
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-
-			"bms_clean_data_disk": {
-				Type:        schema.TypeBool,
-				Optional:    true,
-				Description: "Whether clean disk",
-			},
-
-			"bms_delete_mode": {
-				Type:        schema.TypeString,
-				Optional:    true,
-				Description: "1.Detach 2. WholeDisksErase 3. SystemDiskErase",
-			},
 		},
 	}
 	dataSource := DataSourceVestackEcsInstances().Schema["instances"].Elem.(*schema.Resource).Schema
 	delete(dataSource, "network_interfaces")
 	delete(dataSource, "volumes")
+	delete(dataSource, "eip_address")
 	bp.MergeDateSourceToResource(dataSource, &resource.Schema)
 	return resource
 }
 
 func resourceVestackEcsInstanceCreate(d *schema.ResourceData, meta interface{}) (err error) {
 	instanceService := NewEcsService(meta.(*bp.SdkClient))
-	err = bp.NewRateLimitDispatcher(rateInfo).Create(instanceService, d, ResourceVestackEcsInstance())
+	err = bp.DefaultDispatcher().Create(instanceService, d, ResourceVestackEcsInstance())
 	if err != nil {
 		return fmt.Errorf("error on creating ecs instance  %q, %s", d.Id(), err)
 	}
@@ -463,7 +513,7 @@ func resourceVestackEcsInstanceCreate(d *schema.ResourceData, meta interface{}) 
 
 func resourceVestackEcsInstanceRead(d *schema.ResourceData, meta interface{}) (err error) {
 	instanceService := NewEcsService(meta.(*bp.SdkClient))
-	err = bp.NewRateLimitDispatcher(rateInfo).Read(instanceService, d, ResourceVestackEcsInstance())
+	err = bp.DefaultDispatcher().Read(instanceService, d, ResourceVestackEcsInstance())
 	if err != nil {
 		return fmt.Errorf("error on reading ecs instance %q, %s", d.Id(), err)
 	}
@@ -472,7 +522,7 @@ func resourceVestackEcsInstanceRead(d *schema.ResourceData, meta interface{}) (e
 
 func resourceVestackEcsInstanceUpdate(d *schema.ResourceData, meta interface{}) (err error) {
 	instanceService := NewEcsService(meta.(*bp.SdkClient))
-	err = bp.NewRateLimitDispatcher(rateInfo).Update(instanceService, d, ResourceVestackEcsInstance())
+	err = bp.DefaultDispatcher().Update(instanceService, d, ResourceVestackEcsInstance())
 	if err != nil {
 		return fmt.Errorf("error on updating ecs instance  %q, %s", d.Id(), err)
 	}
@@ -481,7 +531,7 @@ func resourceVestackEcsInstanceUpdate(d *schema.ResourceData, meta interface{}) 
 
 func resourceVestackEcsInstanceDelete(d *schema.ResourceData, meta interface{}) (err error) {
 	instanceService := NewEcsService(meta.(*bp.SdkClient))
-	err = bp.NewRateLimitDispatcher(rateInfo).Delete(instanceService, d, ResourceVestackEcsInstance())
+	err = bp.DefaultDispatcher().Delete(instanceService, d, ResourceVestackEcsInstance())
 	if err != nil {
 		return fmt.Errorf("error on deleting ecs instance %q, %s", d.Id(), err)
 	}

@@ -54,6 +54,11 @@ func DataSourceVestackEcsInstances() *schema.Resource {
 				Optional:    true,
 				Description: "The charge type of ECS instance.",
 			},
+			"instance_name": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Description: "The name of ECS instance. This field support fuzzy query.",
+			},
 			"name_regex": {
 				Type:         schema.TypeString,
 				Optional:     true,
@@ -74,6 +79,42 @@ func DataSourceVestackEcsInstances() *schema.Resource {
 				},
 				Set:         schema.HashString,
 				Description: "A list of DeploymentSet IDs.",
+			},
+			"eip_addresses": {
+				Type:     schema.TypeSet,
+				Optional: true,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
+				Set:         schema.HashString,
+				Description: "A list of Eip addresses.",
+			},
+			"ipv6_addresses": {
+				Type:     schema.TypeSet,
+				Optional: true,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
+				Set:         schema.HashString,
+				Description: "A list of ipv6 addresses.",
+			},
+			"instance_type_families": {
+				Type:     schema.TypeSet,
+				Optional: true,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
+				Set:         schema.HashString,
+				Description: "A list of instance type families.",
+			},
+			"instance_type_ids": {
+				Type:     schema.TypeSet,
+				Optional: true,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
+				Set:         schema.HashString,
+				Description: "A list of instance type IDs.",
 			},
 
 			"output_file": {
@@ -171,6 +212,11 @@ func DataSourceVestackEcsInstances() *schema.Resource {
 							Computed:    true,
 							Description: "The spot strategy of ECS instance.",
 						},
+						"spot_price_limit": {
+							Type:        schema.TypeFloat,
+							Computed:    true,
+							Description: "The spot price limit of ECS instance.",
+						},
 						"instance_type": {
 							Type:        schema.TypeString,
 							Computed:    true,
@@ -235,6 +281,14 @@ func DataSourceVestackEcsInstances() *schema.Resource {
 									},
 								},
 							},
+						},
+						"volume_ids": {
+							Type:     schema.TypeList,
+							Computed: true,
+							Elem: &schema.Schema{
+								Type: schema.TypeString,
+							},
+							Description: "The volume ID list of ECS instance.",
 						},
 						"volumes": {
 							Type:        schema.TypeList,
@@ -329,6 +383,25 @@ func DataSourceVestackEcsInstances() *schema.Resource {
 								Type: schema.TypeString,
 							},
 						},
+						"eip_address": {
+							Type:        schema.TypeList,
+							Computed:    true,
+							Description: "The EIP address of the ECS instance.",
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"allocation_id": {
+										Type:        schema.TypeString,
+										Computed:    true,
+										Description: "The EIP ID of the ECS instance.",
+									},
+									"ip_address": {
+										Type:        schema.TypeString,
+										Computed:    true,
+										Description: "The EIP address of the ECS instance.",
+									},
+								},
+							},
+						},
 					},
 				},
 			},
@@ -338,5 +411,5 @@ func DataSourceVestackEcsInstances() *schema.Resource {
 
 func dataSourceVestackInstancesRead(d *schema.ResourceData, meta interface{}) error {
 	ecsService := NewEcsService(meta.(*bp.SdkClient))
-	return bp.NewRateLimitDispatcher(rateInfo).Data(ecsService, d, DataSourceVestackEcsInstances())
+	return bp.DefaultDispatcher().Data(ecsService, d, DataSourceVestackEcsInstances())
 }

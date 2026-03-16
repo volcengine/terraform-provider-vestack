@@ -33,16 +33,15 @@ func (s *VestackNetworkInterfaceService) ReadResources(m map[string]interface{})
 		ok      bool
 	)
 	return bp.WithPageNumberQuery(m, "PageSize", "PageNumber", 20, 1, func(condition map[string]interface{}) ([]interface{}, error) {
-		vpcClient := s.Client.VpcClient
 		action := "DescribeNetworkInterfaces"
 		logger.Debug(logger.ReqFormat, action, condition)
 		if condition == nil {
-			resp, err = vpcClient.DescribeNetworkInterfacesCommon(nil)
+			resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), nil)
 			if err != nil {
 				return data, err
 			}
 		} else {
-			resp, err = vpcClient.DescribeNetworkInterfacesCommon(&condition)
+			resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), &condition)
 			if err != nil {
 				return data, err
 			}
@@ -101,6 +100,12 @@ func (s *VestackNetworkInterfaceService) ReadResource(resourceData *schema.Resou
 	}
 	data["PrivateIpAddress"] = privateIpAddress
 	data["SecondaryPrivateIpAddressCount"] = len(privateIpAddress)
+
+	if ipv6Sets, ok := data["IPv6Sets"].([]interface{}); ok {
+		data["Ipv6Addresses"] = ipv6Sets
+		data["Ipv6AddressCount"] = len(ipv6Sets)
+	}
+
 	return data, err
 }
 
@@ -151,8 +156,11 @@ func (s *VestackNetworkInterfaceService) CreateResource(resourceData *schema.Res
 			Action:      "CreateNetworkInterface",
 			ConvertMode: bp.RequestConvertAll,
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+				// 兼容逻辑
+				(*call.SdkParam)["ServiceManaged"] = false
+
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
-				return s.Client.VpcClient.CreateNetworkInterfaceCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
 			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 				id, _ := bp.ObtainSdkValue("Result.NetworkInterfaceId", *resp)
@@ -170,6 +178,10 @@ func (s *VestackNetworkInterfaceService) CreateResource(resourceData *schema.Res
 				},
 				"private_ip_address": {
 					TargetField: "PrivateIpAddress",
+					ConvertType: bp.ConvertWithN,
+				},
+				"ipv6_addresses": {
+					TargetField: "Ipv6Address",
 					ConvertType: bp.ConvertWithN,
 				},
 				"tags": {
@@ -196,7 +208,7 @@ func (s *VestackNetworkInterfaceService) ModifyResource(resourceData *schema.Res
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
-				return s.Client.VpcClient.ModifyNetworkInterfaceAttributesCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
 			Convert: map[string]bp.RequestConvert{
 				"security_group_ids": {
@@ -338,6 +350,130 @@ func (s *VestackNetworkInterfaceService) ModifyResource(resourceData *schema.Res
 		}
 	}
 
+	// 检查 ipv6_addresses 改变
+	if resourceData.HasChange("ipv6_addresses") {
+		add, remove, _, _ := bp.GetSetDifference("ipv6_addresses", resourceData, schema.HashString, false)
+		if remove.Len() > 0 {
+			callback = bp.Callback{
+				Call: bp.SdkCall{
+					Action:      "UnassignIpv6Addresses",
+					ConvertMode: bp.RequestConvertInConvert,
+					BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+						(*call.SdkParam)["NetworkInterfaceId"] = d.Id()
+						for index, r := range remove.List() {
+							(*call.SdkParam)["Ipv6Address."+strconv.Itoa(index+1)] = r
+						}
+						return true, nil
+					},
+					Convert: map[string]bp.RequestConvert{
+						"ipv6_addresses": {
+							Ignore: true,
+						},
+						"ipv6_address_count": {
+							Ignore: true,
+						},
+					},
+					ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+						logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
+						return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
+					},
+				},
+			}
+			callbacks = append(callbacks, callback)
+		}
+		if add.Len() > 0 {
+			callback = bp.Callback{
+				Call: bp.SdkCall{
+					Action:      "AssignIpv6Addresses",
+					ConvertMode: bp.RequestConvertInConvert,
+					BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+						(*call.SdkParam)["NetworkInterfaceId"] = d.Id()
+						for index, r := range add.List() {
+							(*call.SdkParam)["Ipv6Address."+strconv.Itoa(index+1)] = r
+						}
+						return true, nil
+					},
+					Convert: map[string]bp.RequestConvert{
+						"ipv6_addresses": {
+							Ignore: true,
+						},
+						"ipv6_address_count": {
+							Ignore: true,
+						},
+					},
+					ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+						logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
+						return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
+					},
+				},
+			}
+			callbacks = append(callbacks, callback)
+		}
+	}
+	// 检查 ipv6_address_count 改变
+	if resourceData.HasChange("ipv6_address_count") {
+		ipv6Addresses := resourceData.Get("ipv6_addresses").(*schema.Set).List()
+		oldCount, newCount := resourceData.GetChange("ipv6_address_count")
+		if oldCount != nil && newCount != nil && newCount != len(ipv6Addresses) {
+			diff := newCount.(int) - oldCount.(int)
+			if diff > 0 {
+				callback = bp.Callback{
+					Call: bp.SdkCall{
+						Action:      "AssignIpv6Addresses",
+						ConvertMode: bp.RequestConvertInConvert,
+						BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+							(*call.SdkParam)["NetworkInterfaceId"] = d.Id()
+							(*call.SdkParam)["Ipv6AddressCount"] = diff
+							return true, nil
+						},
+						Convert: map[string]bp.RequestConvert{
+							"ipv6_addresses": {
+								Ignore: true,
+							},
+							"ipv6_address_count": {
+								Ignore: true,
+							},
+						},
+						ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+							logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
+							return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
+						},
+					},
+				}
+				callbacks = append(callbacks, callback)
+			} else {
+				diff *= -1
+				removeIpAddress := ipv6Addresses[:diff]
+				callback = bp.Callback{
+					Call: bp.SdkCall{
+						Action:      "UnassignIpv6Addresses",
+						ConvertMode: bp.RequestConvertInConvert,
+						BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+							(*call.SdkParam)["NetworkInterfaceId"] = d.Id()
+							for index, r := range removeIpAddress {
+								(*call.SdkParam)["Ipv6Address."+strconv.Itoa(index+1)] = r
+							}
+							return true, nil
+						},
+						Convert: map[string]bp.RequestConvert{
+							"ipv6_addresses": {
+								Ignore: true,
+							},
+							"ipv6_address_count": {
+								Ignore: true,
+							},
+						},
+						ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+							logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
+							return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
+						},
+					},
+				}
+				callbacks = append(callbacks, callback)
+			}
+		}
+	}
+
 	// 更新Tags
 	setResourceTagsCallbacks := bp.SetResourceTags(s.Client, "TagResources", "UntagResources", "eni", resourceData, getUniversalInfo)
 	callbacks = append(callbacks, setResourceTagsCallbacks...)
@@ -355,7 +491,7 @@ func (s *VestackNetworkInterfaceService) RemoveResource(resourceData *schema.Res
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
-				return s.Client.VpcClient.DeleteNetworkInterfaceCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
 			CallError: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall, baseErr error) error {
 				//出现错误后重试

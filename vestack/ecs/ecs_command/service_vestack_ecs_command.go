@@ -108,8 +108,18 @@ func (s *VestackEcsCommandService) CreateResource(resourceData *schema.ResourceD
 			Action:      "CreateCommand",
 			ConvertMode: bp.RequestConvertAll,
 			ContentType: bp.ContentTypeDefault,
+			Convert: map[string]bp.RequestConvert{
+				"parameter_definitions": {
+					TargetField: "ParameterDefinitions",
+					ConvertType: bp.ConvertListN,
+				},
+				"tags": {
+					TargetField: "Tags",
+					ConvertType: bp.ConvertListN,
+				},
+			},
 			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
-				(*call.SdkParam)["Type"] = "Shell"
+				//(*call.SdkParam)["Type"] = "Shell"
 				return true, nil
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
@@ -129,6 +139,8 @@ func (s *VestackEcsCommandService) CreateResource(resourceData *schema.ResourceD
 }
 
 func (s *VestackEcsCommandService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
+	var callbacks []bp.Callback
+
 	callback := bp.Callback{
 		Call: bp.SdkCall{
 			Action:      "ModifyCommand",
@@ -153,6 +165,25 @@ func (s *VestackEcsCommandService) ModifyResource(resourceData *schema.ResourceD
 				"timeout": {
 					TargetField: "Timeout",
 				},
+				"type": {
+					TargetField: "Type",
+				},
+				"enable_parameter": {
+					TargetField: "EnableParameter",
+					ForceGet:    true,
+				},
+				"parameter_definitions": {
+					TargetField: "ParameterDefinitions",
+					ConvertType: bp.ConvertListN,
+					ForceGet:    true,
+					Convert: func(data *schema.ResourceData, i interface{}) interface{} {
+						// 不启用参数时，不发送参数定义
+						if enable := data.Get("enable_parameter").(bool); !enable {
+							return nil
+						}
+						return i
+					},
+				},
 			},
 			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 				if len(*call.SdkParam) > 0 {
@@ -169,7 +200,13 @@ func (s *VestackEcsCommandService) ModifyResource(resourceData *schema.ResourceD
 			},
 		},
 	}
-	return []bp.Callback{callback}
+	callbacks = append(callbacks, callback)
+
+	// 更新Tags
+	setResourceTagsCallbacks := bp.SetResourceTags(s.Client, "TagResources", "UntagResources", "command", resourceData, getUniversalInfo)
+	callbacks = append(callbacks, setResourceTagsCallbacks...)
+
+	return callbacks
 }
 
 func (s *VestackEcsCommandService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []bp.Callback {
@@ -217,6 +254,15 @@ func (s *VestackEcsCommandService) DatasourceResources(*schema.ResourceData, *sc
 			"command_provider": {
 				TargetField: "Provider",
 			},
+			"tags": {
+				TargetField: "TagFilters",
+				ConvertType: bp.ConvertListN,
+				NextLevelConvert: map[string]bp.RequestConvert{
+					"value": {
+						TargetField: "Values.1",
+					},
+				},
+			},
 		},
 		NameField:    "Name",
 		IdField:      "CommandId",
@@ -235,6 +281,15 @@ func (s *VestackEcsCommandService) DatasourceResources(*schema.ResourceData, *sc
 
 func (s *VestackEcsCommandService) ReadResourceId(id string) string {
 	return id
+}
+
+func (s *VestackEcsCommandService) ProjectTrn() *bp.ProjectTrn {
+	return &bp.ProjectTrn{
+		ServiceName:          "ecs",
+		ResourceType:         "command",
+		ProjectResponseField: "ProjectName",
+		ProjectSchemaField:   "project_name",
+	}
 }
 
 func getUniversalInfo(actionName string) bp.UniversalInfo {

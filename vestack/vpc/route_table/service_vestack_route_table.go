@@ -38,16 +38,15 @@ func (s *VestackRouteTableService) ReadResources(m map[string]interface{}) (data
 		ok      bool
 	)
 	tables, err = bp.WithPageNumberQuery(m, "PageSize", "PageNumber", 20, 1, func(condition map[string]interface{}) ([]interface{}, error) {
-		vpcClient := s.Client.VpcClient
 		action := "DescribeRouteTableList"
 		logger.Debug(logger.ReqFormat, action, condition)
 		if condition == nil {
-			resp, err = vpcClient.DescribeRouteTableListCommon(nil)
+			resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), nil)
 			if err != nil {
 				return data, err
 			}
 		} else {
-			resp, err = vpcClient.DescribeRouteTableListCommon(&condition)
+			resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), &condition)
 			if err != nil {
 				return data, err
 			}
@@ -150,9 +149,15 @@ func (s *VestackRouteTableService) CreateResource(resourceData *schema.ResourceD
 		Call: bp.SdkCall{
 			Action:      "CreateRouteTable",
 			ConvertMode: bp.RequestConvertAll,
+			Convert: map[string]bp.RequestConvert{
+				"tags": {
+					TargetField: "Tags",
+					ConvertType: bp.ConvertListN,
+				},
+			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
-				return s.Client.VpcClient.CreateRouteTableCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
 			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 				id, _ := bp.ObtainSdkValue("Result.RouteTableId", *resp)
@@ -179,17 +184,20 @@ func (s *VestackRouteTableService) CreateResource(resourceData *schema.ResourceD
 }
 
 func (s *VestackRouteTableService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
+	var callbacks []bp.Callback
+
 	callback := bp.Callback{
 		Call: bp.SdkCall{
 			Action:      "ModifyRouteTableAttributes",
 			ConvertMode: bp.RequestConvertAll,
 			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 				(*call.SdkParam)["RouteTableId"] = d.Id()
+				delete(*call.SdkParam, "Tags")
 				return true, nil
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
-				return s.Client.VpcClient.ModifyRouteTableAttributesCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
 			Refresh: &bp.StateRefresh{
 				Target:  []string{"Available"},
@@ -207,7 +215,13 @@ func (s *VestackRouteTableService) ModifyResource(resourceData *schema.ResourceD
 			},
 		},
 	}
-	return []bp.Callback{callback}
+	callbacks = append(callbacks, callback)
+
+	// 更新Tags
+	setResourceTagsCallbacks := bp.SetResourceTags(s.Client, "TagResources", "UntagResources", "routetable", resourceData, getUniversalInfo)
+	callbacks = append(callbacks, setResourceTagsCallbacks...)
+
+	return callbacks
 }
 
 func (s *VestackRouteTableService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []bp.Callback {
@@ -220,7 +234,7 @@ func (s *VestackRouteTableService) RemoveResource(resourceData *schema.ResourceD
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
-				return s.Client.VpcClient.DeleteRouteTableCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
 			CallError: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall, baseErr error) error {
 				//出现错误后重试
@@ -257,6 +271,15 @@ func (s *VestackRouteTableService) DatasourceResources(*schema.ResourceData, *sc
 			"ids": {
 				TargetField: "RouteTableIds",
 			},
+			"tags": {
+				TargetField: "TagFilters",
+				ConvertType: bp.ConvertListN,
+				NextLevelConvert: map[string]bp.RequestConvert{
+					"value": {
+						TargetField: "Values.1",
+					},
+				},
+			},
 		},
 		NameField:    "RouteTableName",
 		IdField:      "RouteTableId",
@@ -280,5 +303,15 @@ func (s *VestackRouteTableService) ProjectTrn() *bp.ProjectTrn {
 		ResourceType:         "routetable",
 		ProjectResponseField: "ProjectName",
 		ProjectSchemaField:   "project_name",
+	}
+}
+
+func getUniversalInfo(actionName string) bp.UniversalInfo {
+	return bp.UniversalInfo{
+		ServiceName: "vpc",
+		Version:     "2020-04-01",
+		HttpMethod:  bp.GET,
+		ContentType: bp.Default,
+		Action:      actionName,
 	}
 }

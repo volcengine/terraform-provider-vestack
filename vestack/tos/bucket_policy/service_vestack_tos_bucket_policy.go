@@ -133,7 +133,7 @@ func (s *VestackTosBucketPolicyService) putBucketPolicy(data *schema.ResourceDat
 				},
 			},
 			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
-				j := (*call.SdkParam)[bp.BypassParam].(map[string]interface{})["Policy"]
+				j := d.Get("policy")
 				data := map[string]interface{}{}
 				err := json.Unmarshal([]byte(j.(string)), &data)
 				if err != nil {
@@ -194,6 +194,7 @@ func (s *VestackTosBucketPolicyService) RemoveResource(data *schema.ResourceData
 				return s.Client.BypassSvcClient.DoBypassSvcCall(bp.BypassSvcInfo{
 					HttpMethod: bp.DELETE,
 					Domain:     (*call.SdkParam)[bp.BypassDomain].(string),
+					Path:       []string{"?policy="},
 					UrlParam: map[string]string{
 						"policy": "",
 					},

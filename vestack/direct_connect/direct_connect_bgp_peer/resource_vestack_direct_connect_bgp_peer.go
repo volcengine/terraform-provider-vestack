@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 /*
@@ -13,7 +13,7 @@ import (
 Import
 DirectConnectBgpPeer can be imported using the id, e.g.
 ```
-$ terraform import volcengine_direct_connect_bgp_peer.default bgp-2752hz4teko3k7fap8u4c****
+$ terraform import vestack_direct_connect_bgp_peer.default bgp-2752hz4teko3k7fap8u4c****
 ```
 
 */
@@ -65,12 +65,12 @@ func ResourceVestackDirectConnectBgpPeer() *schema.Resource {
 		},
 	}
 	dataSource := DataSourceVestackDirectConnectBgpPeers().Schema["bgp_peers"].Elem.(*schema.Resource).Schema
-	ve.MergeDateSourceToResource(dataSource, &resource.Schema)
+	bp.MergeDateSourceToResource(dataSource, &resource.Schema)
 	return resource
 }
 
 func resourceVestackDirectConnectBgpPeerCreate(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewDirectConnectBgpPeerService(meta.(*ve.SdkClient))
+	service := NewDirectConnectBgpPeerService(meta.(*bp.SdkClient))
 	err = service.Dispatcher.Create(service, d, ResourceVestackDirectConnectBgpPeer())
 	if err != nil {
 		return fmt.Errorf("error on creating direct_connect_bgp_peer %q, %s", d.Id(), err)
@@ -79,7 +79,7 @@ func resourceVestackDirectConnectBgpPeerCreate(d *schema.ResourceData, meta inte
 }
 
 func resourceVestackDirectConnectBgpPeerRead(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewDirectConnectBgpPeerService(meta.(*ve.SdkClient))
+	service := NewDirectConnectBgpPeerService(meta.(*bp.SdkClient))
 	err = service.Dispatcher.Read(service, d, ResourceVestackDirectConnectBgpPeer())
 	if err != nil {
 		return fmt.Errorf("error on reading direct_connect_bgp_peer %q, %s", d.Id(), err)
@@ -88,7 +88,7 @@ func resourceVestackDirectConnectBgpPeerRead(d *schema.ResourceData, meta interf
 }
 
 func resourceVestackDirectConnectBgpPeerUpdate(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewDirectConnectBgpPeerService(meta.(*ve.SdkClient))
+	service := NewDirectConnectBgpPeerService(meta.(*bp.SdkClient))
 	err = service.Dispatcher.Update(service, d, ResourceVestackDirectConnectBgpPeer())
 	if err != nil {
 		return fmt.Errorf("error on updating direct_connect_bgp_peer %q, %s", d.Id(), err)
@@ -97,7 +97,7 @@ func resourceVestackDirectConnectBgpPeerUpdate(d *schema.ResourceData, meta inte
 }
 
 func resourceVestackDirectConnectBgpPeerDelete(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewDirectConnectBgpPeerService(meta.(*ve.SdkClient))
+	service := NewDirectConnectBgpPeerService(meta.(*bp.SdkClient))
 	err = service.Dispatcher.Delete(service, d, ResourceVestackDirectConnectBgpPeer())
 	if err != nil {
 		return fmt.Errorf("error on deleting direct_connect_bgp_peer %q, %s", d.Id(), err)

@@ -2,7 +2,7 @@ package snat_entry
 
 import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 func DataSourceVestackSnatEntries() *schema.Resource {
@@ -105,6 +105,11 @@ func DataSourceVestackSnatEntries() *schema.Resource {
 							Computed:    true,
 							Description: "The status of the SNAT entry.",
 						},
+						"nat_ip_id": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "The ID of the intranet NAT gateway's transit IP.",
+						},
 					},
 				},
 			},
@@ -113,6 +118,6 @@ func DataSourceVestackSnatEntries() *schema.Resource {
 }
 
 func dataSourceVestackSnatEntriesRead(d *schema.ResourceData, meta interface{}) error {
-	snatEntryService := NewSnatEntryService(meta.(*ve.SdkClient))
-	return ve.DefaultDispatcher().Data(snatEntryService, d, DataSourceVestackSnatEntries())
+	snatEntryService := NewSnatEntryService(meta.(*bp.SdkClient))
+	return bp.DefaultDispatcher().Data(snatEntryService, d, DataSourceVestackSnatEntries())
 }

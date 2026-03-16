@@ -19,6 +19,8 @@ func DataSourceVestackSubnets() *schema.Resource {
 				Set:         schema.HashString,
 				Description: "A list of Subnet IDs.",
 			},
+			"tags": bp.TagsSchema(),
+
 			"name_regex": {
 				Type:         schema.TypeString,
 				Optional:     true,
@@ -54,6 +56,11 @@ func DataSourceVestackSubnets() *schema.Resource {
 				Type:        schema.TypeString,
 				Optional:    true,
 				Description: "The ID of route table which subnet associated with.",
+			},
+			"subnet_owner_id": {
+				Type:        schema.TypeInt,
+				Optional:    true,
+				Description: "The owner ID of the subnet.",
 			},
 			"subnets": {
 				Description: "The collection of Subnet query.",
@@ -161,6 +168,7 @@ func DataSourceVestackSubnets() *schema.Resource {
 								},
 							},
 						},
+						"tags": bp.TagsSchemaComputed(),
 					},
 				},
 			},

@@ -2,7 +2,7 @@ package dnat_entry
 
 import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 func DataSourceVestackDnatEntries() *schema.Resource {
@@ -69,6 +69,11 @@ func DataSourceVestackDnatEntries() *schema.Resource {
 				Description: "List of DNAT entries.",
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
+						"id": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "The ID of the DNAT entry.",
+						},
 						"dnat_entry_id": {
 							Type:        schema.TypeString,
 							Computed:    true,
@@ -122,6 +127,6 @@ func DataSourceVestackDnatEntries() *schema.Resource {
 }
 
 func dataSourceVestackDnatEntriesRead(d *schema.ResourceData, meta interface{}) error {
-	service := NewDnatEntryService(meta.(*ve.SdkClient))
-	return ve.DefaultDispatcher().Data(service, d, DataSourceVestackDnatEntries())
+	service := NewDnatEntryService(meta.(*bp.SdkClient))
+	return bp.DefaultDispatcher().Data(service, d, DataSourceVestackDnatEntries())
 }

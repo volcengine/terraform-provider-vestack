@@ -9,7 +9,7 @@ import (
 
 const testAccVestackZonesDatasourceConfig = `
 data "vestack_zones" "foo"{
-    ids = ["cn-chengdu-a"]
+    ids = ["cn-beijing-a"]
 }
 `
 

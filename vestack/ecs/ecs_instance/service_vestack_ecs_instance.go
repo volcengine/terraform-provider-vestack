@@ -2,7 +2,6 @@ package ecs_instance
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -18,37 +17,9 @@ import (
 	bp "github.com/volcengine/terraform-provider-vestack/common"
 	"github.com/volcengine/terraform-provider-vestack/logger"
 	"github.com/volcengine/terraform-provider-vestack/vestack/ecs/ecs_deployment_set_associate"
+	"github.com/volcengine/terraform-provider-vestack/vestack/eip/eip_address"
 	"github.com/volcengine/terraform-provider-vestack/vestack/vpc/subnet"
-	"golang.org/x/sync/semaphore"
-	"golang.org/x/time/rate"
 )
-
-var rateInfo *bp.RateInfo
-
-func init() {
-	rateInfo = &bp.RateInfo{
-		Create: &bp.Rate{
-			Limiter:   rate.NewLimiter(4, 10),
-			Semaphore: semaphore.NewWeighted(14),
-		},
-		Update: &bp.Rate{
-			Limiter:   rate.NewLimiter(4, 10),
-			Semaphore: semaphore.NewWeighted(14),
-		},
-		Read: &bp.Rate{
-			Limiter:   rate.NewLimiter(4, 10),
-			Semaphore: semaphore.NewWeighted(14),
-		},
-		Delete: &bp.Rate{
-			Limiter:   rate.NewLimiter(4, 10),
-			Semaphore: semaphore.NewWeighted(14),
-		},
-		Data: &bp.Rate{
-			Limiter:   rate.NewLimiter(4, 10),
-			Semaphore: semaphore.NewWeighted(14),
-		},
-	}
-}
 
 type VestackEcsService struct {
 	Client        *bp.SdkClient
@@ -68,25 +39,23 @@ func (s *VestackEcsService) GetClient() *bp.SdkClient {
 
 func (s *VestackEcsService) ReadResources(condition map[string]interface{}) (data []interface{}, err error) {
 	var (
-		resp               *map[string]interface{}
-		results            interface{}
-		next               string
-		ok                 bool
-		ecsInstance        map[string]interface{}
-		networkInterfaces  []interface{}
-		networkInterfaceId string
+		resp              *map[string]interface{}
+		results           interface{}
+		next              string
+		ok                bool
+		ecsInstance       map[string]interface{}
+		networkInterfaces []interface{}
 	)
-	data, err = bp.WithNextTokenQuery(condition, "MaxResults", "NextToken", 20, nil, func(m map[string]interface{}) ([]interface{}, string, error) {
-		ecs := s.Client.EcsClient
+	data, err = bp.WithNextTokenQuery(condition, "MaxResults", "NextToken", 100, nil, func(m map[string]interface{}) ([]interface{}, string, error) {
 		action := "DescribeInstances"
 		logger.Debug(logger.ReqFormat, action, condition)
 		if condition == nil {
-			resp, err = ecs.DescribeInstancesCommon(nil)
+			resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), nil)
 			if err != nil {
 				return data, next, err
 			}
 		} else {
-			resp, err = ecs.DescribeInstancesCommon(&condition)
+			resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), &condition)
 			if err != nil {
 				return data, next, err
 			}
@@ -128,30 +97,23 @@ func (s *VestackEcsService) ReadResources(condition map[string]interface{}) (dat
 			for _, networkInterface := range networkInterfaces {
 				if networkInterfaceMap, ok := networkInterface.(map[string]interface{}); ok &&
 					networkInterfaceMap["Type"] == "primary" {
-					networkInterfaceId = networkInterfaceMap["NetworkInterfaceId"].(string)
+					if ipv6Sets, ok := networkInterfaceMap["IPv6Sets"].([]interface{}); ok {
+						ecsInstance["Ipv6Addresses"] = ipv6Sets
+						ecsInstance["Ipv6AddressCount"] = len(ipv6Sets)
+					}
 				}
 			}
 
-			action := "DescribeNetworkInterfaces"
-			req := map[string]interface{}{
-				"NetworkInterfaceIds.1": networkInterfaceId,
-			}
-			logger.Debug(logger.ReqFormat, action, req)
-			res, err := s.Client.UniversalClient.DoCall(getVpcUniversalInfo(action), &req)
-			if err != nil {
-				logger.Info("DescribeNetworkInterfaces error:", err)
-				continue
-			}
-			logger.Debug(logger.RespFormat, action, condition, *res)
-
-			networkInterfaceInfos, err := bp.ObtainSdkValue("Result.NetworkInterfaceSets", *res)
-			if err != nil {
-				logger.Info("ObtainSdkValue Result.NetworkInterfaceSets error:", err)
-				continue
-			}
-			if ipv6Sets, ok := networkInterfaceInfos.([]interface{})[0].(map[string]interface{})["IPv6Sets"].([]interface{}); ok {
-				ecsInstance["Ipv6Addresses"] = ipv6Sets
-				ecsInstance["Ipv6AddressCount"] = len(ipv6Sets)
+			if volumes, exist := ecsInstance["Volumes"]; exist {
+				if volumeList, ok := volumes.([]interface{}); ok {
+					volumeIds := make([]string, 0)
+					for _, volume := range volumeList {
+						if volumeMap, ok := volume.(map[string]interface{}); ok {
+							volumeIds = append(volumeIds, volumeMap["VolumeId"].(string))
+						}
+					}
+					ecsInstance["VolumeIds"] = volumeIds
+				}
 			}
 		}
 	}
@@ -183,6 +145,33 @@ func (s *VestackEcsService) ReadResource(resourceData *schema.ResourceData, inst
 	if len(data) == 0 {
 		return data, fmt.Errorf("Ecs Instance %s not exist ", instanceId)
 	}
+
+	if numa := resourceData.Get("cpu_options.0.numa_per_socket"); numa != 0 {
+		if v, exist := data["CpuOptions"]; exist {
+			cpuOptions, ok := v.(map[string]interface{})
+			if !ok {
+				return data, fmt.Errorf("CpuOptions is not map ")
+			}
+			cpuOptions["NumaPerSocket"] = numa
+		}
+	}
+
+	if eipId := resourceData.Get("eip_id"); eipId != "" {
+		if v, exist := data["EipAddress"]; exist && v != nil {
+			eipMap, ok := v.(map[string]interface{})
+			if !ok {
+				return data, fmt.Errorf("DescribeInstances EipAddress is not map")
+			}
+			if id, ok := eipMap["AllocationId"]; ok && eipId.(string) != id.(string) {
+				return data, fmt.Errorf("The eip id of the instance is mismatched, specified id: %s, assigned id: %s ", eipId, id)
+			}
+		}
+	}
+
+	// 特殊处理 deployment_set_id
+	data["DeploymentSetIdComputed"] = data["DeploymentSetId"]
+	data["DeploymentSetId"] = resourceData.Get("deployment_set_id")
+
 	return data, nil
 }
 
@@ -290,7 +279,8 @@ func (s *VestackEcsService) WithResourceResponseHandlers(ecs map[string]interfac
 				wg.Done()
 			}()
 			temp := map[string]interface{}{
-				"InstanceId": ecs["InstanceId"],
+				"InstanceId":  ecs["InstanceId"],
+				"ProjectName": ecs["ProjectName"],
 			}
 			_, ebsErr = s.readEbsVolumes([]interface{}{temp})
 			if ebsErr != nil {
@@ -304,10 +294,8 @@ func (s *VestackEcsService) WithResourceResponseHandlers(ecs map[string]interfac
 				if _err := recover(); _err != nil {
 					logger.Debug(logger.ReqFormat, "DescribeUserData", _err)
 				}
-				bp.Release()
 				wg.Done()
 			}()
-			bp.Acquire()
 			var (
 				userDataParam *map[string]interface{}
 				userDataResp  *map[string]interface{}
@@ -316,7 +304,7 @@ func (s *VestackEcsService) WithResourceResponseHandlers(ecs map[string]interfac
 			userDataParam = &map[string]interface{}{
 				"InstanceId": instanceId,
 			}
-			userDataResp, userDataErr = s.Client.EcsClient.DescribeUserDataCommon(userDataParam)
+			userDataResp, userDataErr = s.Client.UniversalClient.DoCall(getUniversalInfo("DescribeUserData"), userDataParam)
 			if userDataErr != nil {
 				return
 			}
@@ -332,23 +320,53 @@ func (s *VestackEcsService) WithResourceResponseHandlers(ecs map[string]interfac
 				if _err := recover(); _err != nil {
 					logger.Debug(logger.ReqFormat, "DescribeNetworkInterfaces", _err)
 				}
-				bp.Release()
 				wg.Done()
 			}()
-			bp.Acquire()
 			var (
 				networkInterfaceParam *map[string]interface{}
 				networkInterfaceResp  *map[string]interface{}
-				networkInterface      interface{}
+				networkInterface      []interface{}
+				networkInterfaces     []interface{}
+				ok                    bool
+				next                  string
 			)
-			networkInterfaceParam = &map[string]interface{}{
-				"InstanceId": instanceId,
-			}
-			networkInterfaceResp, networkInterfaceErr = s.Client.VpcClient.DescribeNetworkInterfacesCommon(networkInterfaceParam)
-			if networkInterfaceErr != nil {
+
+			networkInterfaceParam = &map[string]interface{}{}
+			if networkInterfaces, ok = ecs["NetworkInterfaces"].([]interface{}); !ok {
 				return
 			}
-			networkInterface, networkInterfaceErr = bp.ObtainSdkValue("Result.NetworkInterfaceSets", *networkInterfaceResp)
+			for index, networkInterface := range networkInterfaces {
+				if networkInterfaceMap, ok := networkInterface.(map[string]interface{}); ok {
+					(*networkInterfaceParam)[fmt.Sprintf("%s.%d", "NetworkInterfaceIds", index)] = networkInterfaceMap["NetworkInterfaceId"].(string)
+				}
+			}
+			networkInterface, networkInterfaceErr = bp.WithNextTokenQuery(*networkInterfaceParam, "MaxResults", "NextToken", 100, nil, func(condition map[string]interface{}) ([]interface{}, string, error) {
+				action := "DescribeNetworkInterfaces"
+				logger.Debug(logger.ReqFormat, action, condition)
+				networkInterfaceResp, networkInterfaceErr = s.Client.UniversalClient.DoCall(getVpcUniversalInfo(action), &condition)
+				if networkInterfaceErr != nil {
+					return networkInterface, next, networkInterfaceErr
+				}
+				logger.Debug(logger.RespFormat, action, condition, *networkInterfaceResp)
+
+				results, networkInterfaceErr := bp.ObtainSdkValue("Result.NetworkInterfaceSets", *networkInterfaceResp)
+				if networkInterfaceErr != nil {
+					return networkInterface, next, networkInterfaceErr
+				}
+				nextToken, err := bp.ObtainSdkValue("Result.NextToken", *networkInterfaceResp)
+				if err != nil {
+					return networkInterface, next, err
+				}
+				next = nextToken.(string)
+				if results == nil {
+					results = []interface{}{}
+				}
+
+				if networkInterface, ok = results.([]interface{}); !ok {
+					return networkInterface, next, errors.New("Result.NetworkInterfaceSets is not Slice")
+				}
+				return networkInterface, next, networkInterfaceErr
+			})
 			if networkInterfaceErr != nil {
 				return
 			}
@@ -453,6 +471,10 @@ func (s *VestackEcsService) CreateResource(resourceData *schema.ResourceData, re
 					ConvertType: bp.ConvertWithN,
 					TargetField: "NetworkInterfaces.1.SecurityGroupIds",
 				},
+				"primary_ip_address": {
+					ConvertType: bp.ConvertDefault,
+					TargetField: "NetworkInterfaces.1.PrimaryIpAddress",
+				},
 				"data_volumes": {
 					ConvertType: bp.ConvertListN,
 					TargetField: "Volumes",
@@ -471,6 +493,9 @@ func (s *VestackEcsService) CreateResource(resourceData *schema.ResourceData, re
 						"threads_per_core": {
 							TargetField: "ThreadsPerCore",
 						},
+						"numa_per_socket": {
+							TargetField: "NumaPerSocket",
+						},
 					},
 				},
 				"secondary_network_interfaces": {
@@ -482,6 +507,15 @@ func (s *VestackEcsService) CreateResource(resourceData *schema.ResourceData, re
 						},
 					},
 					StartIndex: 1,
+				},
+				"eip_address": {
+					TargetField: "EipAddress",
+					ConvertType: bp.ConvertListUnique,
+					NextLevelConvert: map[string]bp.RequestConvert{
+						"isp": {
+							TargetField: "ISP",
+						},
+					},
 				},
 				"user_data": {
 					ConvertType: bp.ConvertDefault,
@@ -505,176 +539,16 @@ func (s *VestackEcsService) CreateResource(resourceData *schema.ResourceData, re
 				"ipv6_addresses": {
 					Ignore: true,
 				},
-				"bms_system_disk_config": {
-					ConvertType: bp.ConvertListUnique,
-					TargetField: "BmsSystemDiskConfig",
-					NextLevelConvert: map[string]bp.RequestConvert{
-						"capacity_gb": {
-							TargetField: "CapacityGB",
-							Convert: func(data *schema.ResourceData, i interface{}) interface{} {
-								if vInt, ok := i.(int); ok {
-									numStr := strconv.Itoa(vInt)
-									num := json.Number(numStr)
-									return &num
-								}
-								return nil
-							},
-						},
-						"disk_type": {
-							TargetField: "DiskType",
-						},
-						//		"partitions": {
-						//			TargetField: "Partitions",
-						//ConvertType: bp.ConvertListN,
-						//StartIndex:  1,
-						//NextLevelConvert: map[string]bp.RequestConvert{
-						//	"file_system": {
-						//		ConvertType: bp.ConvertDefault,
-						//		TargetField: "FileSystem",
-						//	},
-						//	"mount_point": {
-						//		ConvertType: bp.ConvertDefault,
-						//		TargetField: "MountPoint",
-						//	},
-						//	"size": {
-						//		ConvertType: bp.ConvertDefault,
-						//		TargetField: "Size",
-						//	},
-						//},
-						//		},
-					},
-				},
 			},
 			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 				(*call.SdkParam)["ClientToken"] = uuid.New().String()
-				//(*call.SdkParam)["Volumes.1.DeleteWithInstance"] = true
+				(*call.SdkParam)["Volumes.1.DeleteWithInstance"] = true
 				(*call.SdkParam)["Count"] = 1
 
-				// 辅助函数：安全转换为字符串
-				safeString := func(v interface{}) string {
-					if v == nil {
-						return ""
-					}
-					if str, ok := v.(string); ok {
-						return str
-					}
-					return fmt.Sprintf("%v", v)
-				}
-
-				// 辅助函数：安全转换为整数
-				safeInt := func(v interface{}) interface{} {
-					if v == nil {
-						return 0
-					}
-					switch val := v.(type) {
-					case int:
-						return val
-					case int32:
-						return int(val)
-					case int64:
-						return int(val)
-					case float32:
-						return int(val)
-					case float64:
-						return int(val)
-					default:
-						return 0
-					}
-				}
-
-				// 处理 BmsSystemDiskConfig.Partitions
-				if bmsConfigRaw, ok := d.GetOk("bms_system_disk_config"); ok {
-					// 安全转换 bms_system_disk_config 为列表
-					var bmsConfigList []interface{}
-					switch v := bmsConfigRaw.(type) {
-					case *schema.Set:
-						bmsConfigList = v.List()
-						logger.Info("Converted bms_system_disk_config from schema.Set to list")
-					case []interface{}:
-						bmsConfigList = v
-					default:
-						logger.Info(fmt.Sprintf("Unexpected type for bms_system_disk_config: %T", v))
-						return false, fmt.Errorf("invalid type for bms_system_disk_config: %T", v)
-					}
-
-					// 用于跟踪全局分区索引
-					globalPartIndex := 0
-
-					for configIndex, configItem := range bmsConfigList {
-						if config, ok := configItem.(map[string]interface{}); ok {
-							// 处理 partitions 字段
-							if partitionsRaw, ok := config["partitions"]; ok {
-								// 安全转换 partitions 为列表
-								var partitionsList []interface{}
-								switch v := partitionsRaw.(type) {
-								case *schema.Set:
-									partitionsList = v.List()
-									logger.Info(fmt.Sprintf("Converted partitions in config[%d] from schema.Set to list", configIndex))
-								case []interface{}:
-									partitionsList = v
-								default:
-									logger.Info(fmt.Sprintf("Unexpected type for partitions in config[%d]: %T", configIndex, v))
-									return false, fmt.Errorf("invalid type for partitions in config[%d]: %T", configIndex, v)
-								}
-
-								logger.Info(fmt.Sprintf("Processing %d partitions in BmsSystemDiskConfig[%d]",
-									len(partitionsList), configIndex))
-
-								// 展开 partitions 为扁平键值对
-								for partIndex, partItem := range partitionsList {
-									if part, ok := partItem.(map[string]interface{}); ok {
-										// 使用全局分区索引
-										globalPartIndex++
-
-										// 处理 file_system
-										if v, exists := part["file_system"]; exists {
-											key := fmt.Sprintf("BmsSystemDiskConfig.Partitions.%d.FileSystem", globalPartIndex)
-											(*call.SdkParam)[key] = safeString(v)
-											logger.Info(fmt.Sprintf("Added %s: %s", key, safeString(v)))
-										}
-
-										// 处理 mount_point
-										if v, exists := part["mount_point"]; exists {
-											key := fmt.Sprintf("BmsSystemDiskConfig.Partitions.%d.MountPoint", globalPartIndex)
-											(*call.SdkParam)[key] = safeString(v)
-											logger.Info(fmt.Sprintf("Added %s: %s", key, safeString(v)))
-										}
-
-										// 处理 size
-										if v, exists := part["size"]; exists {
-											key := fmt.Sprintf("BmsSystemDiskConfig.Partitions.%d.Size", globalPartIndex)
-											(*call.SdkParam)[key] = safeInt(v)
-											logger.Info(fmt.Sprintf("Added %s: %v", key, safeInt(v)))
-										}
-
-										// 处理其他可能的参数
-										for key, value := range part {
-											switch key {
-											case "file_system", "mount_point", "size":
-												// 已处理的字段，跳过
-											default:
-												// 转换其他字段（根据 SDK 要求调整）
-												sdkKey := fmt.Sprintf("BmsSystemDiskConfig.Partitions.%d.%s", globalPartIndex, key)
-												(*call.SdkParam)[sdkKey] = value
-												logger.Info(fmt.Sprintf("Added extra field %s: %v", sdkKey, value))
-											}
-										}
-									} else {
-										logger.Info(fmt.Sprintf("Invalid partition format at index %d: %+v", partIndex, partItem))
-									}
-								}
-
-								logger.Info(fmt.Sprintf("Processed %d partitions for BmsSystemDiskConfig.%d",
-									len(partitionsList), configIndex))
-							}
-						}
-					}
-				}
-
-				// 新增：检查并移除非扁平化的 BmsSystemDiskConfig.Partitions 参数
-				if _, exists := (*call.SdkParam)["BmsSystemDiskConfig.Partitions"]; exists {
-					delete(*call.SdkParam, "BmsSystemDiskConfig.Partitions")
-					logger.Info("Removed non-flattened BmsSystemDiskConfig.Partitions parameter")
+				if (*call.SdkParam)["InstanceChargeType"] != "PrePaid" {
+					delete(*call.SdkParam, "AutoRenew")
+					delete(*call.SdkParam, "AutoRenewPeriod")
+					delete(*call.SdkParam, "Period")
 				}
 
 				if _, ok := (*call.SdkParam)["ZoneId"]; !ok || (*call.SdkParam)["ZoneId"] == "" {
@@ -700,13 +574,19 @@ func (s *VestackEcsService) CreateResource(resourceData *schema.ResourceData, re
 					}
 					(*call.SdkParam)["PeriodUnit"] = "Month"
 				}
+
+				// 随实例自动创出来的 eip, 随实例删除
+				if _, exist := (*call.SdkParam)["EipAddress.BandwidthMbps"]; exist {
+					(*call.SdkParam)["EipAddress.ReleaseWithInstance"] = true
+				}
+
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				return true, nil
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				//创建ECS
-				return s.Client.EcsClient.RunInstancesCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo("RunInstances"), call.SdkParam)
 			},
 			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 				//注意 获取内容 这个地方不能是指针 需要转一次
@@ -779,6 +659,45 @@ func (s *VestackEcsService) CreateResource(resourceData *schema.ResourceData, re
 	}
 	callbacks = append(callbacks, ipv6Callback)
 
+	// 绑定eip
+	eipCallback := bp.Callback{
+		Call: bp.SdkCall{
+			Action:      "AssociateEipAddress",
+			ConvertMode: bp.RequestConvertIgnore,
+			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+				eipId, ok := d.GetOk("eip_id")
+				if !ok {
+					return false, nil
+				}
+				(*call.SdkParam)["AllocationId"] = eipId.(string)
+				(*call.SdkParam)["InstanceId"] = d.Id()
+				(*call.SdkParam)["InstanceType"] = "EcsInstance"
+				return true, nil
+			},
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
+				output, err := s.Client.UniversalClient.DoCall(getVpcUniversalInfo(call.Action), call.SdkParam)
+				logger.Debug(logger.RespFormat, call.Action, *call.SdkParam, *output)
+				if err != nil {
+					d.Set("eip_id", nil)
+				}
+				return output, err
+			},
+			Refresh: &bp.StateRefresh{
+				Target:  []string{"RUNNING"},
+				Timeout: resourceData.Timeout(schema.TimeoutCreate),
+			},
+			ExtraRefresh: map[bp.ResourceService]*bp.StateRefresh{
+				eip_address.NewEipAddressService(s.Client): {
+					Target:     []string{"Attached"},
+					Timeout:    resourceData.Timeout(schema.TimeoutCreate),
+					ResourceId: resourceData.Get("eip_id").(string),
+				},
+			},
+		},
+	}
+	callbacks = append(callbacks, eipCallback)
+
 	return callbacks
 }
 
@@ -810,9 +729,6 @@ func (s *VestackEcsService) ModifyResource(resourceData *schema.ResourceData, re
 				"description": {
 					ConvertType: bp.ConvertDefault,
 				},
-				"ha_strategy": {
-					ConvertType: bp.ConvertDefault,
-				},
 			},
 			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 				//if image changed ,password change in replaceSystemVolume,not here
@@ -829,7 +745,7 @@ func (s *VestackEcsService) ModifyResource(resourceData *schema.ResourceData, re
 				(*call.SdkParam)["ClientToken"] = uuid.New().String()
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				//修改实例属性
-				return s.Client.EcsClient.ModifyInstanceAttributeCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo("ModifyInstanceAttribute"), call.SdkParam)
 			},
 			Refresh: &bp.StateRefresh{
 				Target:  []string{"RUNNING", "STOPPED"},
@@ -852,9 +768,16 @@ func (s *VestackEcsService) ModifyResource(resourceData *schema.ResourceData, re
 					ConvertType: bp.ConvertDefault,
 					ForceGet:    true,
 				},
+				"auto_renew": {
+					ConvertType: bp.ConvertDefault,
+					ForceGet:    true,
+				},
+				"auto_renew_period": {
+					ConvertType: bp.ConvertDefault,
+				},
 			},
 			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
-				if len(*call.SdkParam) > 2 {
+				if len(*call.SdkParam) > 3 {
 					(*call.SdkParam)["AutoPay"] = true
 					if (*call.SdkParam)["InstanceChargeType"].(string) == "PostPaid" {
 						//后付费
@@ -877,7 +800,7 @@ func (s *VestackEcsService) ModifyResource(resourceData *schema.ResourceData, re
 				(*call.SdkParam)["ClientToken"] = uuid.New().String()
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				//修改实例计费方式
-				return s.Client.EcsClient.ModifyInstanceChargeTypeCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo("ModifyInstanceChargeType"), call.SdkParam)
 			},
 			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 				return nil
@@ -909,7 +832,7 @@ func (s *VestackEcsService) ModifyResource(resourceData *schema.ResourceData, re
 				},
 				ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 					logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
-					return s.Client.VpcClient.ModifyNetworkInterfaceAttributesCommon(call.SdkParam)
+					return s.Client.UniversalClient.DoCall(getVpcUniversalInfo("ModifyNetworkInterfaceAttributes"), call.SdkParam)
 				},
 				AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 					return nil
@@ -950,7 +873,7 @@ func (s *VestackEcsService) ModifyResource(resourceData *schema.ResourceData, re
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
-				return s.Client.EbsClient.ExtendVolumeCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getEbsUniversalInfo(call.Action), call.SdkParam)
 			},
 			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 				return nil
@@ -994,7 +917,7 @@ func (s *VestackEcsService) ModifyResource(resourceData *schema.ResourceData, re
 					(*call.SdkParam)["ClientToken"] = uuid.New().String()
 					logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 					//续费实例
-					return s.Client.EcsClient.RenewInstanceCommon(call.SdkParam)
+					return s.Client.UniversalClient.DoCall(getUniversalInfo("RenewInstance"), call.SdkParam)
 				},
 				AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 					return nil
@@ -1039,7 +962,7 @@ func (s *VestackEcsService) ModifyResource(resourceData *schema.ResourceData, re
 					(*call.SdkParam)["ClientToken"] = uuid.New().String()
 					logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 					//修改实例规格
-					return s.Client.EcsClient.ModifyInstanceSpecCommon(call.SdkParam)
+					return s.Client.UniversalClient.DoCall(getUniversalInfo("ModifyInstanceSpec"), call.SdkParam)
 				},
 				AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 					return nil
@@ -1068,7 +991,7 @@ func (s *VestackEcsService) ModifyResource(resourceData *schema.ResourceData, re
 					},
 					"system_volume_size": {
 						ConvertType: bp.ConvertDefault,
-						// ForceGet:    true,
+						ForceGet:    true,
 					},
 					"key_pair_name": {
 						ConvertType: bp.ConvertDefault,
@@ -1086,13 +1009,17 @@ func (s *VestackEcsService) ModifyResource(resourceData *schema.ResourceData, re
 						ConvertType: bp.ConvertDefault,
 						ForceGet:    true,
 					},
-					"bms_clean_data_disk": {
-						ConvertType: bp.ConvertDefault,
-					},
+				},
+				BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+					keyPairName, exist := d.GetOkExists("key_pair_name")
+					if !exist || keyPairName == "" {
+						delete(*call.SdkParam, "KeyPairName")
+					}
+					return true, nil
 				},
 				ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 					logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
-					return s.Client.EcsClient.ReplaceSystemVolumeCommon(call.SdkParam)
+					return s.Client.UniversalClient.DoCall(getUniversalInfo("ReplaceSystemVolume"), call.SdkParam)
 				},
 				AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 					return nil
@@ -1154,45 +1081,52 @@ func (s *VestackEcsService) ModifyResource(resourceData *schema.ResourceData, re
 }
 
 func (s *VestackEcsService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []bp.Callback {
+	var callbacks []bp.Callback
 
-	// 1. 打印从 resourceData 中获取的 bms_delete_mode 值
-	bmsMode, ok := resourceData.GetOk("bms_delete_mode")
-	if ok {
-		logger.Info("RemoveResource 收到的 bms_delete_mode:", bmsMode)
-	} else {
-		logger.Info("RemoveResource 未收到 bms_delete_mode")
+	// 解绑eip
+	eipCallback := bp.Callback{
+		Call: bp.SdkCall{
+			Action:      "DisassociateEipAddress",
+			ConvertMode: bp.RequestConvertIgnore,
+			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+				eipId, ok := d.GetOk("eip_id")
+				if !ok {
+					return false, nil
+				}
+				(*call.SdkParam)["AllocationId"] = eipId.(string)
+				(*call.SdkParam)["InstanceId"] = d.Id()
+				return true, nil
+			},
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getVpcUniversalInfo(call.Action), call.SdkParam)
+			},
+			Refresh: &bp.StateRefresh{
+				Target:  []string{"RUNNING"},
+				Timeout: resourceData.Timeout(schema.TimeoutCreate),
+			},
+			ExtraRefresh: map[bp.ResourceService]*bp.StateRefresh{
+				eip_address.NewEipAddressService(s.Client): {
+					Target:     []string{"Available"},
+					Timeout:    resourceData.Timeout(schema.TimeoutDelete),
+					ResourceId: resourceData.Get("eip_id").(string),
+				},
+			},
+		},
 	}
+	callbacks = append(callbacks, eipCallback)
 
 	callback := bp.Callback{
 		Call: bp.SdkCall{
-			Action: "DeleteInstance",
-			//ConvertMode: bp.RequestConvertIgnore,
-			ConvertMode:    bp.RequestConvertAll,
-			RequestIdField: "InstanceId",
+			Action:      "DeleteInstance",
+			ConvertMode: bp.RequestConvertIgnore,
 			SdkParam: &map[string]interface{}{
 				"InstanceId": resourceData.Id(),
 			},
-			Convert: map[string]bp.RequestConvert{
-				"bms_delete_mode": {
-					ConvertType: bp.ConvertDefault,
-					TargetField: "BMSDeleteMode",
-				},
-			},
-
-			// 3. 在 Convert 过程中添加日志（如果 Convert 是一个独立函数）
-			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
-				logger.Info("BeforeCall 原始参数:", *call.SdkParam)
-				// 手动添加 BmsDeleteMode 参数
-				if bmsMode, ok := d.GetOk("bms_delete_mode"); ok {
-					(*call.SdkParam)["BMSDeleteMode"] = bmsMode
-				}
-				return true, nil
-			},
-
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				//删除ECS
-				return s.Client.EcsClient.DeleteInstanceCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo("DeleteInstance"), call.SdkParam)
 			},
 			CallError: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall, baseErr error) error {
 				//出现错误后重试
@@ -1223,7 +1157,9 @@ func (s *VestackEcsService) RemoveResource(resourceData *schema.ResourceData, r 
 			},
 		},
 	}
-	return []bp.Callback{callback}
+	callbacks = append(callbacks, callback)
+
+	return callbacks
 }
 
 func (s *VestackEcsService) DatasourceResources(data *schema.ResourceData, resource *schema.Resource) bp.DataSourceInfo {
@@ -1246,6 +1182,22 @@ func (s *VestackEcsService) DatasourceResources(data *schema.ResourceData, resou
 				TargetField: "DeploymentSetIds",
 				ConvertType: bp.ConvertWithN,
 			},
+			"eip_addresses": {
+				TargetField: "EipAddresses",
+				ConvertType: bp.ConvertWithN,
+			},
+			"ipv6_addresses": {
+				TargetField: "Ipv6Addresses",
+				ConvertType: bp.ConvertWithN,
+			},
+			"instance_type_families": {
+				TargetField: "InstanceTypeFamilies",
+				ConvertType: bp.ConvertWithN,
+			},
+			"instance_type_ids": {
+				TargetField: "InstanceTypeIds",
+				ConvertType: bp.ConvertWithN,
+			},
 		},
 		NameField:        "InstanceName",
 		IdField:          "InstanceId",
@@ -1256,7 +1208,12 @@ func (s *VestackEcsService) DatasourceResources(data *schema.ResourceData, resou
 			if err != nil {
 				return extraData, err
 			}
-			sourceData, err = s.readEbsVolumes(sourceData)
+			//sourceData, err = s.readEbsVolumes(sourceData)
+			//if err != nil {
+			//	return extraData, err
+			//}
+			// 优化 volumes 查询方式
+			sourceData, err = s.batchReadEbsVolumes(sourceData)
 			if err != nil {
 				return extraData, err
 			}
@@ -1284,40 +1241,6 @@ func (s *VestackEcsService) CommonResponseConvert() map[string]bp.ResponseConver
 			Convert: func(i interface{}) interface{} {
 				size, _ := strconv.Atoi(i.(string))
 				return size
-			},
-		},
-		"BmsSystemDiskConfig": {
-			TargetField: "bms_system_disk_config",
-			Convert: func(i interface{}) interface{} {
-				if v, ok := i.([]interface{}); ok {
-					var result []interface{}
-					for _, config := range v {
-						if configMap, ok := config.(map[string]interface{}); ok {
-							item := map[string]interface{}{
-								"capacity_gb": configMap["CapacityGB"],
-								"disk_type":   configMap["DiskType"],
-							}
-							if partitions, exists := configMap["Partitions"]; exists {
-								var partList []interface{}
-								if pList, ok := partitions.([]interface{}); ok {
-									for _, part := range pList {
-										if partMap, ok := part.(map[string]interface{}); ok {
-											partList = append(partList, map[string]interface{}{
-												"file_system": partMap["FileSystem"],
-												"mount_point": partMap["MountPoint"],
-												"size":        partMap["Size"],
-											})
-										}
-									}
-								}
-								item["partitions"] = partList
-							}
-							result = append(result, item)
-						}
-					}
-					return result
-				}
-				return nil
 			},
 		},
 		"UserData": {
@@ -1413,7 +1336,7 @@ func (s *VestackEcsService) StartOrStopInstanceCallback(resourceData *schema.Res
 		}
 		callback.Call.ExecuteCall = func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 			logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
-			return s.Client.EcsClient.StopInstanceCommon(call.SdkParam)
+			return s.Client.UniversalClient.DoCall(getUniversalInfo("StopInstance"), call.SdkParam)
 		}
 		callback.Call.AfterCall = func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 			*flag = true
@@ -1441,7 +1364,7 @@ func (s *VestackEcsService) StartOrStopInstanceCallback(resourceData *schema.Res
 		}
 		callback.Call.ExecuteCall = func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 			logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
-			return s.Client.EcsClient.StartInstanceCommon(call.SdkParam)
+			return s.Client.UniversalClient.DoCall(getUniversalInfo("StartInstance"), call.SdkParam)
 		}
 		callback.Call.Refresh = &bp.StateRefresh{
 			Target:  []string{"RUNNING"},
@@ -1479,10 +1402,8 @@ func (s *VestackEcsService) readInstanceTypes(sourceData []interface{}) (extraDa
 				if e := recover(); e != nil {
 					logger.Debug(logger.ReqFormat, action, e)
 				}
-				bp.Release()
 				wg.Done()
 			}()
-			bp.Acquire()
 
 			instanceTypeId, _err = bp.ObtainSdkValue("InstanceTypeId", instance)
 			if _err != nil {
@@ -1500,7 +1421,7 @@ func (s *VestackEcsService) readInstanceTypes(sourceData []interface{}) (extraDa
 				"InstanceTypeIds.1": instanceTypeId,
 			}
 			logger.Debug(logger.ReqFormat, action, instanceTypeCondition)
-			resp, _err = s.Client.EcsClient.DescribeInstanceTypesCommon(&instanceTypeCondition)
+			resp, _err = s.Client.UniversalClient.DoCall(getUniversalInfo("DescribeInstanceTypes"), &instanceTypeCondition)
 			if _err != nil {
 				syncMap.Store(instanceTypeId, err)
 				return
@@ -1548,6 +1469,159 @@ func (s *VestackEcsService) readInstanceTypes(sourceData []interface{}) (extraDa
 	return extraData, err
 }
 
+func (s *VestackEcsService) batchReadEbsVolumes(sourceData []interface{}) (extraData []interface{}, err error) {
+	if len(sourceData) == 0 {
+		return sourceData, err
+	}
+	var (
+		wg                 sync.WaitGroup
+		syncMap            sync.Map
+		allVolumeIds       []string
+		allVolumes         []interface{}
+		splitVolumeIds     []interface{}
+		instanceIdsMap     = make(map[string]bool)
+		instanceVolumesMap = make(map[string][]interface{})
+	)
+	for _, data := range sourceData {
+		v, err := bp.ObtainSdkValue("VolumeIds", data)
+		if err != nil {
+			return extraData, err
+		}
+		volumeIds, ok := v.([]string)
+		if !ok {
+			return extraData, fmt.Errorf("volumeIds is not []string")
+		}
+		allVolumeIds = append(allVolumeIds, volumeIds...)
+		instanceId, err := bp.ObtainSdkValue("InstanceId", data)
+		if err != nil {
+			return extraData, err
+		}
+		instanceIdStr, ok := instanceId.(string)
+		if !ok {
+			return extraData, fmt.Errorf("instanceId is not string")
+		}
+		instanceIdsMap[instanceIdStr] = true
+	}
+
+	splitSize := 100
+	for i := 0; i < len(allVolumeIds); i += splitSize {
+		end := i + splitSize
+		if end > len(allVolumeIds) {
+			end = len(allVolumeIds)
+		}
+		splitVolumeIds = append(splitVolumeIds, allVolumeIds[i:end])
+	}
+	splitCount := len(splitVolumeIds)
+
+	wg.Add(splitCount)
+	for idx, data := range splitVolumeIds {
+		var (
+			action  string
+			resp    *map[string]interface{}
+			results interface{}
+			_err    error
+		)
+		action = "DescribeVolumes"
+		index := idx
+		splitVolumes := data
+		go func() {
+			defer func() {
+				if e := recover(); e != nil {
+					logger.Debug(logger.ReqFormat, action, e)
+				}
+				wg.Done()
+			}()
+
+			// query volumes by ids
+			action = "DescribeVolumes"
+			volumeCondition := map[string]interface{}{}
+			for i, id := range splitVolumes.([]string) {
+				volumeCondition[fmt.Sprintf("VolumeIds.%d", i+1)] = id
+			}
+			volumeCondition["PageSize"] = 100
+			volumeCondition["PageNumber"] = 1
+			logger.Debug(logger.ReqFormat, action, volumeCondition)
+			resp, _err = s.Client.UniversalClient.DoCall(getEbsUniversalInfo(action), &volumeCondition)
+			if _err != nil {
+				logger.DebugInfo("DescribeVolumes error: %v", _err)
+				syncMap.Store(index, _err)
+				return
+			}
+			logger.Debug(logger.RespFormat, action, volumeCondition, *resp)
+			results, _err = bp.ObtainSdkValue("Result.Volumes", *resp)
+			if _err != nil {
+				logger.DebugInfo("ObtainSdkValue Result.Volumes error: %v", _err)
+				syncMap.Store(index, _err)
+				return
+			}
+			if results == nil {
+				results = []interface{}{}
+			}
+			volumes, ok := results.([]interface{})
+			if !ok {
+				logger.DebugInfo("Result.Volumes is not Slice")
+				syncMap.Store(index, _err)
+				return
+			}
+
+			syncMap.Store(index, volumes)
+		}()
+	}
+	wg.Wait()
+	var errorStr string
+
+	for index, _ := range splitVolumeIds {
+		if v, ok := syncMap.Load(index); ok {
+			if e1, ok1 := v.(error); ok1 {
+				errorStr = errorStr + e1.Error() + ";"
+			}
+			if volumes, ok2 := v.([]interface{}); ok2 {
+				allVolumes = append(allVolumes, volumes...)
+			}
+		}
+	}
+
+	for _, v := range allVolumes {
+		volume, ok := v.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		instanceId, err := bp.ObtainSdkValue("InstanceId", volume)
+		if err != nil {
+			continue
+		}
+		instanceIdStr, ok := instanceId.(string)
+		if !ok {
+			continue
+		}
+		if ok := instanceIdsMap[instanceIdStr]; ok {
+			instanceVolumesMap[instanceIdStr] = append(instanceVolumesMap[instanceIdStr], volume)
+		}
+	}
+
+	for _, instance := range sourceData {
+		var (
+			instanceId interface{}
+		)
+		instanceId, err = bp.ObtainSdkValue("InstanceId", instance)
+		if err != nil {
+			return extraData, err
+		}
+		instanceIdStr, ok := instanceId.(string)
+		if !ok {
+			return extraData, fmt.Errorf("instanceId is not string")
+		}
+		if v, exist := instanceVolumesMap[instanceIdStr]; exist {
+			instance.(map[string]interface{})["Volumes"] = v
+		}
+		extraData = append(extraData, instance)
+	}
+	if len(errorStr) > 0 {
+		return extraData, fmt.Errorf(errorStr)
+	}
+	return extraData, err
+}
+
 func (s *VestackEcsService) readEbsVolumes(sourceData []interface{}) (extraData []interface{}, err error) {
 	//merge ebs
 	var (
@@ -1561,45 +1635,77 @@ func (s *VestackEcsService) readEbsVolumes(sourceData []interface{}) (extraData 
 	for _, data := range sourceData {
 		instance := data
 		var (
-			instanceId interface{}
-			action     string
-			resp       *map[string]interface{}
-			results    interface{}
-			_err       error
+			instanceId  interface{}
+			projectName interface{}
+			action      string
+			resp        *map[string]interface{}
+			results     interface{}
+			volumes     []interface{}
+			_err        error
 		)
 		go func() {
 			defer func() {
 				if e := recover(); e != nil {
 					logger.Debug(logger.ReqFormat, action, e)
 				}
-				bp.Release()
 				wg.Done()
 			}()
-			bp.Acquire()
 
 			instanceId, _err = bp.ObtainSdkValue("InstanceId", instance)
 			if _err != nil {
-				syncMap.Store(instanceId, err)
+				syncMap.Store(instanceId, _err)
 				return
 			}
+			projectName, _err = bp.ObtainSdkValue("ProjectName", instance)
+			if _err != nil {
+				syncMap.Store(instanceId, _err)
+				return
+			}
+
+			// query system volume
+			systemVolume, _err := s.describeSystemVolume(instanceId.(string), projectName.(string))
+			if _err != nil {
+				syncMap.Store(instanceId, _err)
+				return
+			}
+			volumes = append(volumes, systemVolume)
+
+			// query data volumes
 			action = "DescribeVolumes"
 			logger.Debug(logger.ReqFormat, action, instanceId)
 			volumeCondition := map[string]interface{}{
 				"InstanceId": instanceId,
+				"Kind":       "data",
 			}
 			logger.Debug(logger.ReqFormat, action, volumeCondition)
-			resp, _err = s.Client.EbsClient.DescribeVolumesCommon(&volumeCondition)
+			resp, _err = s.Client.UniversalClient.DoCall(getEbsUniversalInfo(action), &volumeCondition)
 			if _err != nil {
-				syncMap.Store(instanceId, err)
-				return
+				if bp.AccessDeniedError(_err) {
+					// 权限错误，直接返回
+					syncMap.Store(instanceId, volumes)
+					return
+				} else {
+					syncMap.Store(instanceId, _err)
+					return
+				}
 			}
 			logger.Debug(logger.RespFormat, action, volumeCondition, *resp)
 			results, _err = bp.ObtainSdkValue("Result.Volumes", *resp)
 			if _err != nil {
-				syncMap.Store(instanceId, err)
+				syncMap.Store(instanceId, _err)
 				return
 			}
-			syncMap.Store(instanceId, results)
+			if results == nil {
+				results = []interface{}{}
+			}
+			dataVolumes, ok := results.([]interface{})
+			if !ok {
+				syncMap.Store(instanceId, errors.New("Result.Volumes is not Slice"))
+				return
+			}
+			volumes = append(volumes, dataVolumes...)
+
+			syncMap.Store(instanceId, volumes)
 		}()
 	}
 	wg.Wait()
@@ -1626,6 +1732,50 @@ func (s *VestackEcsService) readEbsVolumes(sourceData []interface{}) (extraData 
 	return extraData, err
 }
 
+func (s *VestackEcsService) describeSystemVolume(instanceId, projectName string) (map[string]interface{}, error) {
+	var (
+		action       string
+		req          *map[string]interface{}
+		resp         *map[string]interface{}
+		results      interface{}
+		systemVolume map[string]interface{}
+		err          error
+	)
+
+	action = "DescribeVolumes"
+	req = &map[string]interface{}{
+		"InstanceId":  instanceId,
+		"ProjectName": projectName,
+		"Kind":        "system",
+	}
+	logger.Debug(logger.ReqFormat, action, *req)
+	resp, err = s.Client.UniversalClient.DoCall(getEbsUniversalInfo("DescribeVolumes"), req)
+	if err != nil {
+		return systemVolume, err
+	}
+	logger.Debug(logger.RespFormat, action, *req, *resp)
+	results, err = bp.ObtainSdkValue("Result.Volumes", *resp)
+	if err != nil {
+		return systemVolume, err
+	}
+	if results == nil {
+		results = []interface{}{}
+	}
+	volumes, ok := results.([]interface{})
+	if !ok {
+		return systemVolume, errors.New("Result.Volumes is not Slice")
+	}
+	for _, volume := range volumes {
+		if systemVolume, ok = volume.(map[string]interface{}); !ok {
+			return systemVolume, errors.New("Volumes Value is not map ")
+		}
+	}
+	if len(systemVolume) == 0 {
+		return systemVolume, fmt.Errorf("System Volume of %s is empty ", instanceId)
+	}
+	return systemVolume, nil
+}
+
 func getUniversalInfo(actionName string) bp.UniversalInfo {
 	return bp.UniversalInfo{
 		ServiceName: "ecs",
@@ -1638,6 +1788,15 @@ func getUniversalInfo(actionName string) bp.UniversalInfo {
 func getVpcUniversalInfo(actionName string) bp.UniversalInfo {
 	return bp.UniversalInfo{
 		ServiceName: "vpc",
+		Version:     "2020-04-01",
+		HttpMethod:  bp.GET,
+		Action:      actionName,
+	}
+}
+
+func getEbsUniversalInfo(actionName string) bp.UniversalInfo {
+	return bp.UniversalInfo{
+		ServiceName: "storage_ebs",
 		Version:     "2020-04-01",
 		HttpMethod:  bp.GET,
 		Action:      actionName,

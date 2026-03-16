@@ -20,6 +20,12 @@ func DataSourceVestackEcsKeyPairs() *schema.Resource {
 				Optional:    true,
 				Description: "Name of key pair.",
 			},
+			"tags": bp.TagsSchema(),
+			"project_name": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Description: "The project name of the key pair.",
+			},
 			"name_regex": {
 				Type:         schema.TypeString,
 				Optional:     true,
@@ -88,6 +94,12 @@ func DataSourceVestackEcsKeyPairs() *schema.Resource {
 							Type:        schema.TypeString,
 							Computed:    true,
 							Description: "The update time of key pair.",
+						},
+						"tags": bp.TagsSchemaComputed(),
+						"project_name": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "The project name of the key pair.",
 						},
 					},
 				},

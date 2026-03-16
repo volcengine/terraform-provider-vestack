@@ -99,8 +99,7 @@ func ResourceVestackEipAddress() *schema.Resource {
 				Optional:    true,
 				Computed:    true,
 				ForceNew:    true,
-				Description: "The ISP of the EIP, the value can be `BGP` or `ChinaMobile` or `ChinaUnicom` or `ChinaTelecom` or `SingleLine_BGP` or `Static_BGP`or `Customize_ISP`.",
-				//ValidateFunc: validation.StringInSlice([]string{"BGP", "ChinaMobile", "ChinaUnicom", "ChinaTelecom", "SingleLine_BGP", "Static_BGP", ""}, false),
+				Description: "The ISP of the EIP, the value can be `BGP` or `ChinaMobile` or `ChinaUnicom` or `ChinaTelecom` or `SingleLine_BGP` or `Static_BGP` or `Fusion_BGP`.",
 			},
 			"name": {
 				Type:        schema.TypeString,
@@ -116,7 +115,21 @@ func ResourceVestackEipAddress() *schema.Resource {
 			"project_name": {
 				Type:        schema.TypeString,
 				Optional:    true,
+				Computed:    true,
 				Description: "The ProjectName of the EIP.",
+			},
+			"security_protection_types": {
+				Type:     schema.TypeList,
+				Optional: true,
+				ForceNew: true,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
+				Description: "Security protection types for public IP addresses. " +
+					"Parameter - N: Indicates the number of security protection types, currently only supports taking 1. Value: `AntiDDoS_Enhanced` or left blank." +
+					"If the value is `AntiDDoS_Enhanced`, then will create an eip with enhanced protection," +
+					"(can be added to DDoS native protection (enterprise version) instance). " +
+					"If left blank, it indicates an eip with basic protection.",
 			},
 			"tags": bp.TagsSchema(),
 			"status": {

@@ -46,3 +46,13 @@ const (
 	UrlParam
 	FilePathParam
 )
+
+const (
+	RegionalService = "Regional"
+	GlobalService   = "Global"
+
+	VestackIpv4EndpointSuffix   = "vestackapi.com"
+	VestackBypassEndpointSuffix = "volces.com"
+
+	VestackStsEndpoint = "sts.vestackapi.com"
+)

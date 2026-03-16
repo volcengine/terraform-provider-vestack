@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 /*
@@ -54,8 +54,8 @@ func ResourceVestackAclEntry() *schema.Resource {
 }
 
 func resourceVestackAclEntryCreate(d *schema.ResourceData, meta interface{}) (err error) {
-	aclEntryService := NewAclEntryService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Create(aclEntryService, d, ResourceVestackAclEntry())
+	aclEntryService := NewAclEntryService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Create(aclEntryService, d, ResourceVestackAclEntry())
 	if err != nil {
 		return fmt.Errorf("error on creating acl entry %q, %w", d.Id(), err)
 	}
@@ -63,8 +63,8 @@ func resourceVestackAclEntryCreate(d *schema.ResourceData, meta interface{}) (er
 }
 
 func resourceVestackAclEntryRead(d *schema.ResourceData, meta interface{}) (err error) {
-	aclEntryService := NewAclEntryService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Read(aclEntryService, d, ResourceVestackAclEntry())
+	aclEntryService := NewAclEntryService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Read(aclEntryService, d, ResourceVestackAclEntry())
 	if err != nil {
 		return fmt.Errorf("error on reading acl entry %q, %w", d.Id(), err)
 	}
@@ -72,8 +72,8 @@ func resourceVestackAclEntryRead(d *schema.ResourceData, meta interface{}) (err 
 }
 
 func resourceVestackAclEntryDelete(d *schema.ResourceData, meta interface{}) (err error) {
-	aclEntryService := NewAclEntryService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Delete(aclEntryService, d, ResourceVestackAclEntry())
+	aclEntryService := NewAclEntryService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Delete(aclEntryService, d, ResourceVestackAclEntry())
 	if err != nil {
 		return fmt.Errorf("error on deleting acl entry %q, %w", d.Id(), err)
 	}

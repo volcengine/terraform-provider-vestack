@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 /*
@@ -14,7 +14,7 @@ import (
 Import
 TrafficMirrorFilterRule can be imported using the id, e.g.
 ```
-$ terraform import volcengine_traffic_mirror_filter_rule.default resource_id
+$ terraform import vestack_traffic_mirror_filter_rule.default resource_id
 ```
 
 */
@@ -118,7 +118,7 @@ func ResourceVestackTrafficMirrorFilterRule() *schema.Resource {
 }
 
 func resourceVestackTrafficMirrorFilterRuleCreate(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewTrafficMirrorFilterRuleService(meta.(*ve.SdkClient))
+	service := NewTrafficMirrorFilterRuleService(meta.(*bp.SdkClient))
 	err = service.Dispatcher.Create(service, d, ResourceVestackTrafficMirrorFilterRule())
 	if err != nil {
 		return fmt.Errorf("error on creating traffic_mirror_filter_rule %q, %s", d.Id(), err)
@@ -127,7 +127,7 @@ func resourceVestackTrafficMirrorFilterRuleCreate(d *schema.ResourceData, meta i
 }
 
 func resourceVestackTrafficMirrorFilterRuleRead(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewTrafficMirrorFilterRuleService(meta.(*ve.SdkClient))
+	service := NewTrafficMirrorFilterRuleService(meta.(*bp.SdkClient))
 	err = service.Dispatcher.Read(service, d, ResourceVestackTrafficMirrorFilterRule())
 	if err != nil {
 		return fmt.Errorf("error on reading traffic_mirror_filter_rule %q, %s", d.Id(), err)
@@ -136,7 +136,7 @@ func resourceVestackTrafficMirrorFilterRuleRead(d *schema.ResourceData, meta int
 }
 
 func resourceVestackTrafficMirrorFilterRuleUpdate(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewTrafficMirrorFilterRuleService(meta.(*ve.SdkClient))
+	service := NewTrafficMirrorFilterRuleService(meta.(*bp.SdkClient))
 	err = service.Dispatcher.Update(service, d, ResourceVestackTrafficMirrorFilterRule())
 	if err != nil {
 		return fmt.Errorf("error on updating traffic_mirror_filter_rule %q, %s", d.Id(), err)
@@ -145,7 +145,7 @@ func resourceVestackTrafficMirrorFilterRuleUpdate(d *schema.ResourceData, meta i
 }
 
 func resourceVestackTrafficMirrorFilterRuleDelete(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewTrafficMirrorFilterRuleService(meta.(*ve.SdkClient))
+	service := NewTrafficMirrorFilterRuleService(meta.(*bp.SdkClient))
 	err = service.Dispatcher.Delete(service, d, ResourceVestackTrafficMirrorFilterRule())
 	if err != nil {
 		return fmt.Errorf("error on deleting traffic_mirror_filter_rule %q, %s", d.Id(), err)

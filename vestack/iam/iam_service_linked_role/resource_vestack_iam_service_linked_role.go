@@ -12,17 +12,19 @@ import (
 /*
 
 Import
-Iam service linked role can be imported using the servicx name and the service linked role name, e.g.
+IamServiceLinkedRole can be imported using the id, e.g.
 ```
-$ terraform import vestack_iam_service_linked_role.default ecs:ServiceRoleForEcs
+$ terraform import vestack_iam_service_linked_role.default service_name:role_name
 ```
 
 */
 
 func ResourceVestackIamServiceLinkedRole() *schema.Resource {
-	return &schema.Resource{
+	tagsSchema := bp.TagsSchema()
+	resource := &schema.Resource{
 		Create: resourceVestackIamServiceLinkedRoleCreate,
 		Read:   resourceVestackIamServiceLinkedRoleRead,
+		Update: resourceVestackIamServiceLinkedRoleUpdate,
 		Delete: resourceVestackIamServiceLinkedRoleDelete,
 		Importer: &schema.ResourceImporter{
 			State: iamServiceLinkedRoleImporter,
@@ -38,68 +40,69 @@ func ResourceVestackIamServiceLinkedRole() *schema.Resource {
 				ForceNew:    true,
 				Description: "The name of the service.",
 			},
+
+			// computed fields
 			"role_name": {
 				Type:        schema.TypeString,
 				Computed:    true,
-				Description: "The name of the service linked role.",
+				Description: "The name of the role.",
 			},
-			"display_name": {
-				Type:        schema.TypeString,
-				Computed:    true,
-				Description: "The display name of the service linked Role.",
-			},
-			"description": {
-				Type:        schema.TypeString,
-				Computed:    true,
-				Description: "The description of the service linked Role.",
-			},
-			"max_session_duration": {
+			"role_id": {
 				Type:        schema.TypeInt,
 				Computed:    true,
-				Description: "The max session duration of the service linked Role.",
+				Description: "The id of the role.",
 			},
-			"trn": {
+			"status": {
 				Type:        schema.TypeString,
 				Computed:    true,
-				Description: "The resource name of the service linked Role.",
+				Description: "The status of the role.",
 			},
-			"trust_policy_document": {
-				Type:        schema.TypeString,
-				Computed:    true,
-				Description: "The trust policy document of the service linked Role.",
-			},
+			"tags": tagsSchema,
 		},
 	}
+	return resource
 }
 
-func resourceVestackIamServiceLinkedRoleCreate(d *schema.ResourceData, meta interface{}) error {
-	IamServiceLinkedRoleService := NewIamServiceLinkedRoleService(meta.(*bp.SdkClient))
-	if err := bp.DefaultDispatcher().Create(IamServiceLinkedRoleService, d, ResourceVestackIamServiceLinkedRole()); err != nil {
-		return fmt.Errorf("error on creating iam service linked role %q, %w", d.Id(), err)
+func resourceVestackIamServiceLinkedRoleCreate(d *schema.ResourceData, meta interface{}) (err error) {
+	service := NewIamServiceLinkedRoleService(meta.(*bp.SdkClient))
+	err = service.Dispatcher.Create(service, d, ResourceVestackIamServiceLinkedRole())
+	if err != nil {
+		return fmt.Errorf("error on creating iam_service_linked_role %q, %s", d.Id(), err)
 	}
 	return resourceVestackIamServiceLinkedRoleRead(d, meta)
 }
 
-func resourceVestackIamServiceLinkedRoleRead(d *schema.ResourceData, meta interface{}) error {
-	IamServiceLinkedRoleService := NewIamServiceLinkedRoleService(meta.(*bp.SdkClient))
-	if err := bp.DefaultDispatcher().Read(IamServiceLinkedRoleService, d, ResourceVestackIamServiceLinkedRole()); err != nil {
-		return fmt.Errorf("error on reading iam service linked role %q, %w", d.Id(), err)
+func resourceVestackIamServiceLinkedRoleRead(d *schema.ResourceData, meta interface{}) (err error) {
+	service := NewIamServiceLinkedRoleService(meta.(*bp.SdkClient))
+	err = service.Dispatcher.Read(service, d, ResourceVestackIamServiceLinkedRole())
+	if err != nil {
+		return fmt.Errorf("error on reading iam_service_linked_role %q, %s", d.Id(), err)
 	}
-	return nil
+	return err
 }
 
-func resourceVestackIamServiceLinkedRoleDelete(d *schema.ResourceData, meta interface{}) error {
-	IamServiceLinkedRoleService := NewIamServiceLinkedRoleService(meta.(*bp.SdkClient))
-	if err := bp.DefaultDispatcher().Delete(IamServiceLinkedRoleService, d, ResourceVestackIamServiceLinkedRole()); err != nil {
-		return fmt.Errorf("error on deleting iam service linked role %q, %w", d.Id(), err)
+func resourceVestackIamServiceLinkedRoleUpdate(d *schema.ResourceData, meta interface{}) (err error) {
+	service := NewIamServiceLinkedRoleService(meta.(*bp.SdkClient))
+	err = service.Dispatcher.Update(service, d, ResourceVestackIamServiceLinkedRole())
+	if err != nil {
+		return fmt.Errorf("error on updating iam_service_linked_role %q, %s", d.Id(), err)
 	}
-	return nil
+	return resourceVestackIamServiceLinkedRoleRead(d, meta)
 }
 
-func iamServiceLinkedRoleImporter(data *schema.ResourceData, i interface{}) ([]*schema.ResourceData, error) {
+func resourceVestackIamServiceLinkedRoleDelete(d *schema.ResourceData, meta interface{}) (err error) {
+	service := NewIamServiceLinkedRoleService(meta.(*bp.SdkClient))
+	err = service.Dispatcher.Delete(service, d, ResourceVestackIamServiceLinkedRole())
+	if err != nil {
+		return fmt.Errorf("error on deleting iam_service_linked_role %q, %s", d.Id(), err)
+	}
+	return err
+}
+
+var iamServiceLinkedRoleImporter = func(data *schema.ResourceData, i interface{}) ([]*schema.ResourceData, error) {
 	items := strings.Split(data.Id(), ":")
 	if len(items) != 2 {
-		return []*schema.ResourceData{data}, fmt.Errorf("import id must split with ':'")
+		return []*schema.ResourceData{data}, fmt.Errorf("import id is invalid")
 	}
 	if err := data.Set("service_name", items[0]); err != nil {
 		return []*schema.ResourceData{data}, err

@@ -202,6 +202,9 @@ func (s *VestackVkeNodeService) CreateResource(resourceData *schema.ResourceData
 				"image_id": {
 					TargetField: "ImageId",
 				},
+				"pre_script": {
+					TargetField: "PreScript",
+				},
 				"initialize_script": {
 					TargetField: "InitializeScript",
 				},
@@ -242,9 +245,10 @@ func (s *VestackVkeNodeService) RemoveResource(resourceData *schema.ResourceData
 			ConvertMode: bp.RequestConvertIgnore,
 			ContentType: bp.ContentTypeJson,
 			SdkParam: &map[string]interface{}{
-				"ClusterId":  resourceData.Get("cluster_id"),
-				"NodePoolId": resourceData.Get("node_pool_id"),
-				"Ids.1":      resourceData.Id(),
+				"ClusterId":       resourceData.Get("cluster_id"),
+				"NodePoolId":      resourceData.Get("node_pool_id"),
+				"Ids.1":           resourceData.Id(),
+				"RetainResources": []string{"Ecs"},
 			},
 			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 				nodePool, err := s.nodePoolService.ReadResources(map[string]interface{}{

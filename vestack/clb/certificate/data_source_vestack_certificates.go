@@ -3,7 +3,7 @@ package certificate
 import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 func DataSourceVestackCertificates() *schema.Resource {
@@ -19,7 +19,7 @@ func DataSourceVestackCertificates() *schema.Resource {
 				Set:         schema.HashString,
 				Description: "The list of Certificate IDs.",
 			},
-			"tags": ve.TagsSchema(),
+			"tags": bp.TagsSchema(),
 			"name_regex": {
 				Type:         schema.TypeString,
 				Optional:     true,
@@ -89,6 +89,14 @@ func DataSourceVestackCertificates() *schema.Resource {
 							Computed:    true,
 							Description: "The domain name of the Certificate.",
 						},
+						"subject_alternative_names": {
+							Type: schema.TypeSet,
+							Elem: &schema.Schema{
+								Type: schema.TypeString,
+							},
+							Computed:    true,
+							Description: "The subject alternative domain names of the Certificate.",
+						},
 						"project_name": {
 							Type:        schema.TypeString,
 							Computed:    true,
@@ -103,7 +111,12 @@ func DataSourceVestackCertificates() *schema.Resource {
 							Computed:    true,
 							Description: "The ID list of the Listener.",
 						},
-						"tags": ve.TagsSchemaComputed(),
+						"service_managed": {
+							Type:        schema.TypeBool,
+							Computed:    true,
+							Description: "Whether the Certificate is managed by the CLB service.",
+						},
+						"tags": bp.TagsSchemaComputed(),
 					},
 				},
 			},
@@ -112,6 +125,6 @@ func DataSourceVestackCertificates() *schema.Resource {
 }
 
 func dataSourceVestackCertificatesRead(d *schema.ResourceData, meta interface{}) error {
-	certificateService := NewCertificateService(meta.(*ve.SdkClient))
-	return ve.DefaultDispatcher().Data(certificateService, d, DataSourceVestackCertificates())
+	certificateService := NewCertificateService(meta.(*bp.SdkClient))
+	return bp.DefaultDispatcher().Data(certificateService, d, DataSourceVestackCertificates())
 }

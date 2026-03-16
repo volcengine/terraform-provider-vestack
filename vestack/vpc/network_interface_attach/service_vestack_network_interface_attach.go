@@ -56,10 +56,9 @@ func (s *VestackNetworkInterfaceAttachService) ReadResource(resourceData *schema
 	req := map[string]interface{}{
 		"NetworkInterfaceId": networkInterfaceId,
 	}
-	vpc := s.Client.VpcClient
 	action := "DescribeNetworkInterfaceAttributes"
 	logger.Debug(logger.ReqFormat, action, req)
-	resp, err = vpc.DescribeNetworkInterfaceAttributesCommon(&req)
+	resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), &req)
 	if err != nil {
 		return data, err
 	}
@@ -149,7 +148,7 @@ func (s *VestackNetworkInterfaceAttachService) CreateResource(resourceData *sche
 			ConvertMode: bp.RequestConvertAll,
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
-				return s.Client.VpcClient.AttachNetworkInterfaceCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
 			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 				d.SetId(fmt.Sprint((*call.SdkParam)["NetworkInterfaceId"], ":", (*call.SdkParam)["InstanceId"]))
@@ -180,7 +179,7 @@ func (s *VestackNetworkInterfaceAttachService) RemoveResource(resourceData *sche
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
-				return s.Client.VpcClient.DetachNetworkInterfaceCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
 			CallError: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall, baseErr error) error {
 				//出现错误后重试
@@ -211,4 +210,14 @@ func (s *VestackNetworkInterfaceAttachService) DatasourceResources(*schema.Resou
 
 func (s *VestackNetworkInterfaceAttachService) ReadResourceId(id string) string {
 	return id
+}
+
+func getUniversalInfo(actionName string) bp.UniversalInfo {
+	return bp.UniversalInfo{
+		ServiceName: "vpc",
+		Version:     "2020-04-01",
+		HttpMethod:  bp.GET,
+		ContentType: bp.Default,
+		Action:      actionName,
+	}
 }

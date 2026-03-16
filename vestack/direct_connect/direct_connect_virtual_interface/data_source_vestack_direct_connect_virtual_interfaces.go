@@ -3,12 +3,12 @@ package direct_connect_virtual_interface
 import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 func DataSourceVestackDirectConnectVirtualInterfaces() *schema.Resource {
 	return &schema.Resource{
-		Read: dataSourceVolcengineDirectConnectVirtualInterfacesRead,
+		Read: dataSourceVestackDirectConnectVirtualInterfacesRead,
 		Schema: map[string]*schema.Schema{
 			"ids": {
 				Type:     schema.TypeSet,
@@ -221,7 +221,7 @@ func DataSourceVestackDirectConnectVirtualInterfaces() *schema.Resource {
 	}
 }
 
-func dataSourceVolcengineDirectConnectVirtualInterfacesRead(d *schema.ResourceData, meta interface{}) error {
-	service := NewDirectConnectVirtualInterfaceService(meta.(*ve.SdkClient))
+func dataSourceVestackDirectConnectVirtualInterfacesRead(d *schema.ResourceData, meta interface{}) error {
+	service := NewDirectConnectVirtualInterfaceService(meta.(*bp.SdkClient))
 	return service.Dispatcher.Data(service, d, DataSourceVestackDirectConnectVirtualInterfaces())
 }

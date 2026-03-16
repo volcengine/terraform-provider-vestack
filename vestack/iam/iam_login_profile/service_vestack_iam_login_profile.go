@@ -26,7 +26,28 @@ func (s *VestackIamLoginProfileService) GetClient() *bp.SdkClient {
 }
 
 func (s *VestackIamLoginProfileService) ReadResources(m map[string]interface{}) (data []interface{}, err error) {
-	return nil, nil
+	var (
+		result interface{}
+	)
+	action := "GetLoginProfile"
+	logger.Debug(logger.ReqFormat, action, m)
+	resp, err := s.Client.UniversalClient.DoCall(getUniversalInfo(action), &m)
+	if err != nil {
+		return data, err
+	}
+	logger.Debug(logger.RespFormat, action, resp)
+	result, err = bp.ObtainSdkValue("Result.LoginProfile", *resp)
+	if err != nil {
+		return data, err
+	}
+	if dataMap, ok := result.(map[string]interface{}); ok {
+		delete(dataMap, "Password")
+		data = append(data, dataMap)
+	} else {
+		return data, errors.New("Value is not map ")
+	}
+
+	return data, nil
 }
 
 func (s *VestackIamLoginProfileService) ReadResource(resourceData *schema.ResourceData, id string) (data map[string]interface{}, err error) {
@@ -76,7 +97,36 @@ func (s *VestackIamLoginProfileService) CreateResource(resourceData *schema.Reso
 	callback := bp.Callback{
 		Call: bp.SdkCall{
 			Action:      "CreateLoginProfile",
-			ConvertMode: bp.RequestConvertAll,
+			ConvertMode: bp.RequestConvertInConvert,
+			Convert: map[string]bp.RequestConvert{
+				"user_name": {
+					ForceGet: true,
+				},
+				"password": {
+					ForceGet: true,
+				},
+				"login_allowed": {
+					TargetField: "LoginAllowed",
+				},
+				"password_reset_required": {
+					TargetField: "PasswordResetRequired",
+				},
+				"safe_auth_flag": {
+					TargetField: "SafeAuthFlag",
+				},
+				"safe_auth_type": {
+					TargetField: "SafeAuthType",
+				},
+				"safe_auth_exempt_required": {
+					TargetField: "SafeAuthExemptRequired",
+				},
+				"safe_auth_exempt_unit": {
+					TargetField: "SafeAuthExemptUnit",
+				},
+				"safe_auth_exempt_duration": {
+					TargetField: "SafeAuthExemptDuration",
+				},
+			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
@@ -84,7 +134,9 @@ func (s *VestackIamLoginProfileService) CreateResource(resourceData *schema.Reso
 			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam, resp)
 				time.Sleep(5 * time.Second)
-				d.SetId(d.Get("user_name").(string))
+				if v, ok := d.Get("user_name").(string); ok && v != "" {
+					d.SetId(v)
+				}
 				return nil
 			},
 		},
@@ -96,8 +148,42 @@ func (s *VestackIamLoginProfileService) CreateResource(resourceData *schema.Reso
 func (s *VestackIamLoginProfileService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
 	callback := bp.Callback{
 		Call: bp.SdkCall{
-			Action:         "UpdateLoginProfile",
-			ConvertMode:    bp.RequestConvertAll,
+			Action:      "UpdateLoginProfile",
+			ConvertMode: bp.RequestConvertAll,
+			Convert: map[string]bp.RequestConvert{
+				"password": {
+					ForceGet:    true,
+					TargetField: "Password",
+				},
+				"login_allowed": {
+					ForceGet:    true,
+					TargetField: "LoginAllowed",
+				},
+				"password_reset_required": {
+					ForceGet:    true,
+					TargetField: "PasswordResetRequired",
+				},
+				"safe_auth_flag": {
+					ForceGet:    true,
+					TargetField: "SafeAuthFlag",
+				},
+				"safe_auth_type": {
+					ForceGet:    true,
+					TargetField: "SafeAuthType",
+				},
+				"safe_auth_exempt_required": {
+					ForceGet:    true,
+					TargetField: "SafeAuthExemptRequired",
+				},
+				"safe_auth_exempt_unit": {
+					ForceGet:    true,
+					TargetField: "SafeAuthExemptUnit",
+				},
+				"safe_auth_exempt_duration": {
+					ForceGet:    true,
+					TargetField: "SafeAuthExemptDuration",
+				},
+			},
 			RequestIdField: "UserName",
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
@@ -127,7 +213,33 @@ func (s *VestackIamLoginProfileService) RemoveResource(resourceData *schema.Reso
 }
 
 func (s *VestackIamLoginProfileService) DatasourceResources(*schema.ResourceData, *schema.Resource) bp.DataSourceInfo {
-	return bp.DataSourceInfo{}
+	return bp.DataSourceInfo{
+		RequestConverts: map[string]bp.RequestConvert{
+			"user_name": {
+				TargetField: "UserName",
+			},
+		},
+		NameField:    "UserName",
+		IdField:      "UserName",
+		CollectField: "login_profiles",
+		ResponseConverts: map[string]bp.ResponseConvert{
+			"SafeAuthFlag": {
+				TargetField: "safe_auth_flag",
+			},
+			"SafeAuthType": {
+				TargetField: "safe_auth_type",
+			},
+			"SafeAuthExemptRequired": {
+				TargetField: "safe_auth_exempt_required",
+			},
+			"SafeAuthExemptUnit": {
+				TargetField: "safe_auth_exempt_unit",
+			},
+			"SafeAuthExemptDuration": {
+				TargetField: "safe_auth_exempt_duration",
+			},
+		},
+	}
 }
 
 func (s *VestackIamLoginProfileService) ReadResourceId(id string) string {
@@ -141,5 +253,6 @@ func getUniversalInfo(actionName string) bp.UniversalInfo {
 		Version:     "2018-01-01",
 		HttpMethod:  bp.GET,
 		ContentType: bp.Default,
+		RegionType:  bp.Global,
 	}
 }

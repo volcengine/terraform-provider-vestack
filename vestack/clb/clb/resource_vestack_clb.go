@@ -6,7 +6,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 /*
@@ -40,6 +40,20 @@ func ResourceVestackClb() *schema.Resource {
 				Computed:    true,
 				ForceNew:    true,
 				Description: "The region of the request.",
+			},
+			// 开白参数，API explore 暂未支持
+			// "exclusive_cluster_id": {
+			// 	Type:        schema.TypeString,
+			// 	ForceNew:    true,
+			// 	Optional:    true,
+			// 	Description: "The ID of the exclusive cluster.",
+			// },
+			"zone_type": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				ForceNew:     true,
+				Description:  "The zone type of the CLB. And optional choice contains `single` or `active-standby`.",
+				ValidateFunc: validation.StringInSlice([]string{"single", "active-standby"}, false),
 			},
 			"type": {
 				Type:         schema.TypeString,
@@ -78,6 +92,27 @@ func ResourceVestackClb() *schema.Resource {
 				ForceNew:    true,
 				Optional:    true,
 				Description: "The eni address of the CLB.",
+			},
+			"eni_address_num": {
+				Type:     schema.TypeInt,
+				Optional: true,
+				ForceNew: true,
+				Description: "The number of private IPv4 addresses for the CLB instance. " +
+					"This parameter is valid only when the type parameter is set to private and eni_address is not passed in.",
+			},
+			"bypass_security_group_enabled": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				Computed:     true,
+				ValidateFunc: validation.StringInSlice([]string{"on", "off"}, false),
+				Description:  "Whether the CLB instance enables the \"Allow Backend Security Group\" function. value range: `on`, `off`.",
+			},
+			"timestamp_remove_enabled": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				Computed:     true,
+				ValidateFunc: validation.StringInSlice([]string{"on", "off"}, false),
+				Description:  "Whether to enable the function of clearing the timestamp of TCP/HTTP/HTTPS packets (i.e., the time stamp). value range: `on`, `off`.",
 			},
 			"modification_protection_status": {
 				Type:         schema.TypeString,
@@ -122,9 +157,27 @@ func ResourceVestackClb() *schema.Resource {
 					"This field is only effective when creating a PrePaid NatGateway. When importing resources, this attribute will not be imported. If this attribute is set, please use lifecycle and ignore_changes ignore changes in fields.",
 			},
 			"renew_type": {
-				Type:        schema.TypeString,
-				Computed:    true,
-				Description: "The renew type of the CLB. When the value of the load_balancer_billing_type is `PrePaid`, the query returns this field.",
+				Type:     schema.TypeString,
+				Optional: true,
+				Computed: true,
+				Description: "The renew type of the CLB. When the value of the load_balancer_billing_type is `PrePaid`, the query returns this field. " +
+					"Valid values: `AutoRenew`, `ManualRenew`.",
+				ValidateFunc: validation.StringInSlice([]string{"AutoRenew", "ManualRenew"}, false),
+			},
+			"renew_period_times": {
+				Type:     schema.TypeInt,
+				Optional: true,
+				Computed: true,
+				Description: "The renew period times of the CLB. When the value of the renew_type is `AutoRenew`, this field is effective. " +
+					"Valid values: `1`, `2`, `3`, `6`, `12`.",
+				ValidateFunc: validation.IntInSlice([]int{1, 2, 3, 6, 12}),
+			},
+			"remain_renew_times": {
+				Type:     schema.TypeInt,
+				Computed: true,
+				Optional: true,
+				Description: "The remain renew times of the CLB. When the value of the renew_type is `AutoRenew`, this field is effective. " +
+					"Valid values: `-1`, `1~100`. The `-1` indicates unlimited automatic renewals.",
 			},
 			"eip_billing_config": {
 				Type:     schema.TypeList,
@@ -159,13 +212,36 @@ func ResourceVestackClb() *schema.Resource {
 							//Description:  "The peek bandwidth of the EIP which automatically assigned to CLB. The value range in 1~500 for PostPaidByBandwidth, and 1~200 for PostPaidByTraffic.",
 							Description: "The peek bandwidth of the EIP which automatically assigned to CLB.",
 						},
+						"bandwidth_package_id": {
+							Type:        schema.TypeString,
+							Optional:    true,
+							Computed:    true,
+							ForceNew:    true,
+							Description: "The ID of the shared bandwidth package that the EIP is to be added to. Only valid when the eip_billing_type is `PostPaidByBandwidth` or `PostPaidByTraffic`.",
+						},
+						"security_protection_types": {
+							Type:        schema.TypeList,
+							Optional:    true,
+							Computed:    true,
+							ForceNew:    true,
+							Description: "The security protection types of the EIP. Only valid when the eip_billing_type is `PostPaidByBandwidth` or `PostPaidByTraffic`.",
+							Elem: &schema.Schema{
+								Type: schema.TypeString,
+							},
+						},
+						"security_protection_instance_id": {
+							Type:        schema.TypeString,
+							Optional:    true,
+							Computed:    true,
+							ForceNew:    true,
+							Description: "The ID of the DDoS native protection (Enterprise Edition) instance.",
+						},
 					},
 				},
 			},
 			"address_ip_version": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ForceNew:     true,
 				Default:      "ipv4",
 				ValidateFunc: validation.StringInSlice([]string{"ipv4", "DualStack"}, false),
 				Description: "The address ip version of the Clb. Valid values: `ipv4`, `DualStack`. Default is `ipv4`.\n" +
@@ -176,7 +252,6 @@ func ResourceVestackClb() *schema.Resource {
 				Type:         schema.TypeString,
 				Optional:     true,
 				Computed:     true,
-				ForceNew:     true,
 				ValidateFunc: validation.IsIPv6Address,
 				Description:  "The eni ipv6 address of the Clb.",
 			},
@@ -201,7 +276,7 @@ func ResourceVestackClb() *schema.Resource {
 				Computed:    true,
 				Description: "The ProjectName of the CLB.",
 			},
-			"tags": ve.TagsSchema(),
+			"tags": bp.TagsSchema(),
 			"master_zone_id": {
 				Type:        schema.TypeString,
 				Optional:    true,
@@ -236,8 +311,8 @@ func ResourceVestackClb() *schema.Resource {
 }
 
 func resourceVestackClbCreate(d *schema.ResourceData, meta interface{}) (err error) {
-	clbService := NewClbService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Create(clbService, d, ResourceVestackClb())
+	clbService := NewClbService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Create(clbService, d, ResourceVestackClb())
 	if err != nil {
 		return fmt.Errorf("error on creating clb  %q, %w", d.Id(), err)
 	}
@@ -245,8 +320,8 @@ func resourceVestackClbCreate(d *schema.ResourceData, meta interface{}) (err err
 }
 
 func resourceVestackClbRead(d *schema.ResourceData, meta interface{}) (err error) {
-	clbService := NewClbService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Read(clbService, d, ResourceVestackClb())
+	clbService := NewClbService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Read(clbService, d, ResourceVestackClb())
 	if err != nil {
 		return fmt.Errorf("error on reading clb %q, %w", d.Id(), err)
 	}
@@ -254,8 +329,8 @@ func resourceVestackClbRead(d *schema.ResourceData, meta interface{}) (err error
 }
 
 func resourceVestackClbUpdate(d *schema.ResourceData, meta interface{}) (err error) {
-	clbService := NewClbService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Update(clbService, d, ResourceVestackClb())
+	clbService := NewClbService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Update(clbService, d, ResourceVestackClb())
 	if err != nil {
 		return fmt.Errorf("error on updating clb  %q, %w", d.Id(), err)
 	}
@@ -263,8 +338,8 @@ func resourceVestackClbUpdate(d *schema.ResourceData, meta interface{}) (err err
 }
 
 func resourceVestackClbDelete(d *schema.ResourceData, meta interface{}) (err error) {
-	clbService := NewClbService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Delete(clbService, d, ResourceVestackClb())
+	clbService := NewClbService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Delete(clbService, d, ResourceVestackClb())
 	if err != nil {
 		return fmt.Errorf("error on deleting clb %q, %w", d.Id(), err)
 	}

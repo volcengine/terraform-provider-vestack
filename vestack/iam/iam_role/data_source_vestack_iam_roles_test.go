@@ -26,7 +26,8 @@ resource "vestack_iam_role" "foo2" {
 }
 
 data "vestack_iam_roles" "foo"{
-    role_name = "${vestack_iam_role.foo1.role_name},${vestack_iam_role.foo2.role_name}"
+    query = "acc-test-role"
+    depends_on = [vestack_iam_role.foo1, vestack_iam_role.foo2]
 }
 `
 
@@ -48,6 +49,7 @@ func TestAccVestackIamRolesDatasource_Basic(t *testing.T) {
 				Config: testAccVestackIamRolesDatasourceConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(acc.ResourceId, "roles.#", "2"),
+					resource.TestCheckResourceAttrSet(acc.ResourceId, "roles.0.update_date"),
 				),
 			},
 		},

@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	bp "github.com/volcengine/terraform-provider-vestack/common"
 )
 
@@ -45,24 +44,21 @@ func ResourceVestackVolume() *schema.Resource {
 				Description: "The name of Volume.",
 			},
 			"volume_type": {
-				Type:         schema.TypeString,
-				Required:     true,
-				ForceNew:     true,
-				Description:  "The type of Volume, the value is `PTSSD` or `ESSD_PL0` or `ESSD_PL1` or `ESSD_PL2` or `ESSD_FlexPL`.",
-				ValidateFunc: validation.StringInSlice([]string{"ESSD_PL0", "ESSD_PL1", "ESSD_PL2", "PTSSD", "ESSD_FlexPL"}, false),
+				Type:     schema.TypeString,
+				Required: true,
+				//ForceNew:    true,
+				Description: "The type of Volume. Valid values: `ESSD_PL0`, `ESSD_FlexPL`, `TSSD_TL0`.",
 			},
 			"kind": {
-				Type:         schema.TypeString,
-				Required:     true,
-				ForceNew:     true,
-				ValidateFunc: validation.StringInSlice([]string{"data"}, false),
-				Description:  "The kind of Volume, the value is `data`.",
+				Type:        schema.TypeString,
+				Required:    true,
+				ForceNew:    true,
+				Description: "The kind of Volume, the value is `data`.",
 			},
 			"size": {
-				Type:         schema.TypeInt,
-				Required:     true,
-				ValidateFunc: validation.IntAtLeast(20), // 最小20GB
-				Description:  "The size of Volume.",
+				Type:        schema.TypeInt,
+				Required:    true,
+				Description: "The size of Volume.",
 			},
 			"description": {
 				Type:        schema.TypeString,
@@ -74,20 +70,63 @@ func ResourceVestackVolume() *schema.Resource {
 				Optional: true,
 				Computed: true,
 				ForceNew: true,
-				Description: "The ID of the instance to which the created volume is automatically attached. " +
-					"Please note this field needs to ask the system administrator to apply for a whitelist.\n" +
+				Description: "The ID of the instance to which the created volume is automatically attached. It is recommended to attach the PostPaid volume to instance through resource `volume_attach`." +
 					"When use this field to attach ecs instance, the attached volume cannot be deleted by terraform, please use `terraform state rm vestack_volume.resource_name` command to remove it from terraform state file and management.",
 			},
-			"volume_charge_type": {
-				Type:         schema.TypeString,
-				Optional:     true,
-				ValidateFunc: validation.StringInSlice([]string{"PostPaid", "PrePaid"}, false),
-				Default:      "PostPaid",
-				Description: "The charge type of the Volume, the value is `PostPaid` or `PrePaid`. " +
-					"The `PrePaid` volume cannot be detached. " +
-					"Cannot convert `PrePaid` volume to `PostPaid`." +
-					"Please note that `PrePaid` type needs to ask the system administrator to apply for a whitelist.",
+			"snapshot_id": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+				Description: "The id of the snapshot. When creating a volume using snapshots, this field is required.\n" +
+					"When importing resources, this attribute will not be imported. If this attribute is set, please use lifecycle and ignore_changes ignore changes in fields.",
 			},
+			"volume_charge_type": {
+				Type:     schema.TypeString,
+				Optional: true,
+				Default:  "PostPaid",
+				Description: "The charge type of the Volume, the value is `PostPaid` or `PrePaid`. " +
+					"The `PrePaid` volume cannot be detached.",
+			},
+			"extra_performance_type_id": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Description: "The type of extra performance for volume. The valid values for ESSD FlexPL volume are `Throughput`, `Balance`, `IOPS`. The valid value for TSSD_TL0 volume is `Throughput`.",
+			},
+			"extra_performance_iops": {
+				Type:     schema.TypeInt,
+				Optional: true,
+				Computed: true,
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					_, ok := d.GetOk("extra_performance_type_id")
+					return !ok
+				},
+				Description: "The extra IOPS performance size for volume. Unit: times per second. The valid values for `Balance` and `IOPS` is 0~50000.",
+			},
+			"extra_performance_throughput_mb": {
+				Type:     schema.TypeInt,
+				Optional: true,
+				Computed: true,
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					_, ok := d.GetOk("extra_performance_type_id")
+					return !ok
+				},
+				Description: "The extra Throughput performance size for volume. Unit: MB/s. The valid values for ESSD FlexPL volume is 0~650.",
+			},
+			"delete_with_instance": {
+				Type:        schema.TypeBool,
+				Optional:    true,
+				Computed:    true,
+				Description: "Delete Volume with Attached Instance.",
+			},
+			"project_name": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Computed:    true,
+				Description: "The ProjectName of the Volume.",
+			},
+			"tags": bp.TagsSchema(),
+
+			// computed fields
 			"status": {
 				Type:        schema.TypeString,
 				Computed:    true,
@@ -102,21 +141,6 @@ func ResourceVestackVolume() *schema.Resource {
 				Type:        schema.TypeString,
 				Computed:    true,
 				Description: "Creation time of Volume.",
-			},
-			"delete_with_instance": {
-				Type:        schema.TypeBool,
-				Optional:    true,
-				Computed:    true,
-				Description: "Delete Volume with Attached Instance.",
-				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
-					// 创建时不存在这个参数，修改时存在这个参数
-					return d.Id() == ""
-				},
-			},
-			"project_name": {
-				Type:        schema.TypeString,
-				Optional:    true,
-				Description: "The ProjectName of the Volume.",
 			},
 		},
 	}

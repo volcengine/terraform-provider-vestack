@@ -149,7 +149,33 @@ func (s *VestackEcsKeyPairAssociateService) CreateResource(resourceData *schema.
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
-				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
+				resp, err := s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
+				if err != nil {
+					return resp, err
+				}
+				logger.Debug(logger.RespFormat, call.Action, *resp)
+				operationDetails, err := bp.ObtainSdkValue("Result.OperationDetails", *resp)
+				if err != nil {
+					return resp, fmt.Errorf("get Result.OperationDetails failed")
+				}
+				if _, ok := operationDetails.([]interface{}); !ok || len(operationDetails.([]interface{})) == 0 {
+					return resp, fmt.Errorf("get Result.OperationDetails is not a valid slice")
+				}
+				operationDetail, ok := operationDetails.([]interface{})[0].(map[string]interface{})
+				if !ok {
+					return resp, fmt.Errorf("operation detail is not a map")
+				}
+				errStruct, ok := operationDetail["Error"]
+				if !ok || errStruct == nil {
+					return resp, nil
+				}
+				errMap, ok := operationDetail["Error"].(map[string]interface{})
+				if !ok {
+					return resp, fmt.Errorf("operation detail Error is not a map")
+				}
+				code := errMap["Code"].(string)
+				message := errMap["Message"].(string)
+				return resp, fmt.Errorf(code + ": " + message)
 			},
 			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 				d.SetId((*call.SdkParam)["KeyPairId"].(string) + ":" + (*call.SdkParam)["InstanceIds.1"].(string))

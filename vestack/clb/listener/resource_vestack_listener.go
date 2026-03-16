@@ -6,7 +6,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 /*
@@ -61,13 +61,39 @@ func ResourceVestackListener() *schema.Resource {
 				Type:        schema.TypeInt,
 				Required:    true,
 				ForceNew:    true,
-				Description: "The port receiving request of the Listener, the value range in 1~65535.",
+				Description: "The port receiving request of the Listener, the value range in 0~65535. When `protocol` is `TCP` or `UDP`, 0 can be passed in, indicating that full port listening is enabled.",
+			},
+			"start_port": {
+				Type:        schema.TypeInt,
+				Optional:    true,
+				ForceNew:    true,
+				Computed:    true,
+				Description: "The start port for full port listening, with a value range of 1-65535. When `port` is 0, this parameter is required.",
+			},
+			"end_port": {
+				Type:        schema.TypeInt,
+				Optional:    true,
+				ForceNew:    true,
+				Computed:    true,
+				Description: "The end port for full port listening, with a value range of 1-65535. When `port` is 0, this parameter is required, and must be greater than `start_port`.",
 			},
 			"scheduler": {
 				Type:        schema.TypeString,
 				Optional:    true,
 				Computed:    true,
 				Description: "The scheduling algorithm of the Listener. Optional choice contains `wrr`, `wlc`, `sh`.",
+			},
+			"cps": {
+				Type:        schema.TypeInt,
+				Optional:    true,
+				Computed:    true,
+				Description: "The maximum number of new connections per second allowed for the Listener. Default value: `-1`, no limit, which is the upper limit of new connections for the CLB instance.",
+			},
+			"max_connections": {
+				Type:        schema.TypeInt,
+				Optional:    true,
+				Computed:    true,
+				Description: "The maximum number of connections allowed for the Listener. Default value: `-1`, no limit, which is the upper limit of new connections for the CLB instance.",
 			},
 			"enabled": {
 				Type:        schema.TypeString,
@@ -81,10 +107,97 @@ func ResourceVestackListener() *schema.Resource {
 				Computed:    true,
 				Description: "The connection timeout of the Listener.",
 			},
+			"client_header_timeout": {
+				Type:         schema.TypeInt,
+				Optional:     true,
+				Computed:     true,
+				Description:  "The client header timeout of the Listener. Only HTTP/HTTPS listeners support this parameter, i.e., `protocol`=`HTTP` or `HTTPS`. value range: 30-120.",
+				ValidateFunc: validation.IntBetween(30, 120),
+			},
+			"client_body_timeout": {
+				Type:         schema.TypeInt,
+				Optional:     true,
+				Computed:     true,
+				Description:  "The client body timeout of the Listener. Only HTTP/HTTPS listeners support this parameter. value range: 30-120.",
+				ValidateFunc: validation.IntBetween(30, 120),
+			},
+			"keepalive_timeout": {
+				Type:         schema.TypeInt,
+				Optional:     true,
+				Computed:     true,
+				Description:  "The timeout period for the long connection between the client and the CLB. Only HTTP/HTTPS listeners support this parameter. value range: 0-900.",
+				ValidateFunc: validation.IntBetween(0, 900),
+			},
+			"proxy_connect_timeout": {
+				Type:         schema.TypeInt,
+				Optional:     true,
+				Computed:     true,
+				Description:  "The timeout period for establishing a connection between the CLB and the backend server. Only HTTP/HTTPS listeners support this parameter. value range: 4-120.",
+				ValidateFunc: validation.IntBetween(4, 120),
+			},
+			"proxy_send_timeout": {
+				Type:         schema.TypeInt,
+				Optional:     true,
+				Computed:     true,
+				Description:  "The timeout period for CLB to transmit requests to backend servers. Only HTTP/HTTPS listeners support this parameter. value range: 30-3600.",
+				ValidateFunc: validation.IntBetween(30, 3600),
+			},
+			"proxy_read_timeout": {
+				Type:         schema.TypeInt,
+				Optional:     true,
+				Computed:     true,
+				Description:  "The timeout period for CLB to read the response from the backend server. Only HTTP/HTTPS listeners support this parameter. value range: 30-3600.",
+				ValidateFunc: validation.IntBetween(30, 3600),
+			},
+			"send_timeout": {
+				Type:         schema.TypeInt,
+				Optional:     true,
+				Computed:     true,
+				Description:  "The timeout period for CLB to send responses to the client. Only HTTP/HTTPS listeners support this parameter. value range: 1-3600.",
+				ValidateFunc: validation.IntBetween(1, 3600),
+			},
+			"security_policy_id": {
+				Type:        schema.TypeString,
+				Computed:    true,
+				Optional:    true,
+				Description: "The TLS security policy of the HTTPS listener. Only HTTPS listeners support this parameter. value range: `default_policy`, `tls_cipher_policy_1_0`, `tls_cipher_policy_1_1`, `tls_cipher_policy_1_2`, `tls_cipher_policy_1_2_strict`.",
+			},
+			"http2_enabled": {
+				Type:         schema.TypeString,
+				Computed:     true,
+				Optional:     true,
+				ValidateFunc: validation.StringInSlice([]string{"on", "off"}, false),
+				Description:  "Whether the HTTPS protocol listener enables the front-end HTTP 2.0 protocol. value range: `on`, `off`.",
+			},
+			"certificate_source": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Computed:    true,
+				Description: "The source of the certificate which is associated with the listener. Values: `clb`, `cert_center`.",
+			},
 			"certificate_id": {
 				Type:        schema.TypeString,
 				Optional:    true,
 				Description: "The certificate id associated with the listener.",
+			},
+			"cert_center_certificate_id": {
+				Type:        schema.TypeString,
+				Computed:    true,
+				Optional:    true,
+				Description: "The ID of the certificate in Certificate Center. When `certificate_source` is `cert_center`, this parameter is required.",
+			},
+			"ca_enabled": {
+				Type:         schema.TypeString,
+				Computed:     true,
+				Optional:     true,
+				ValidateFunc: validation.StringInSlice([]string{"on", "off"}, false),
+				Description:  "Whether to enable CACertificate two-way authentication. Values: on, off.",
+			},
+			"ca_certificate_id": {
+				Type:        schema.TypeString,
+				Computed:    true,
+				Optional:    true,
+				Description: "The ID of the CA certificate which is associated with the listener. When `ca_enabled` is `on`, this parameter is required.",
 			},
 			"server_group_id": {
 				Type:        schema.TypeString,
@@ -206,6 +319,7 @@ func ResourceVestackListener() *schema.Resource {
 				Description: "The connection drain timeout of the Listener. Valid value range is `0-900`.\n" +
 					"This filed is required when the value of field `connection_drain_enabled` is `on`.",
 			},
+			"tags": bp.TagsSchema(),
 			"health_check": {
 				Type:        schema.TypeList,
 				Optional:    true,
@@ -280,6 +394,11 @@ func ResourceVestackListener() *schema.Resource {
 							Description:      "The UDP expect of health check. This field must be specified simultaneously with field `udp_request`.",
 							DiffSuppressFunc: HealthCheckUDPOnlyFieldDiffSuppress,
 						},
+						"port": {
+							Type:        schema.TypeInt,
+							Optional:    true,
+							Description: "The port for health check, with a value range of 1-65535.",
+						},
 					},
 				},
 			},
@@ -288,8 +407,8 @@ func ResourceVestackListener() *schema.Resource {
 }
 
 func resourceVestackListenerCreate(d *schema.ResourceData, meta interface{}) (err error) {
-	listenerService := NewListenerService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Create(listenerService, d, ResourceVestackListener())
+	listenerService := NewListenerService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Create(listenerService, d, ResourceVestackListener())
 	if err != nil {
 		return fmt.Errorf("error on creating listener  %q, %w", d.Id(), err)
 	}
@@ -297,8 +416,8 @@ func resourceVestackListenerCreate(d *schema.ResourceData, meta interface{}) (er
 }
 
 func resourceVestackListenerRead(d *schema.ResourceData, meta interface{}) (err error) {
-	listenerService := NewListenerService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Read(listenerService, d, ResourceVestackListener())
+	listenerService := NewListenerService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Read(listenerService, d, ResourceVestackListener())
 	if err != nil {
 		return fmt.Errorf("error on reading listener %q, %w", d.Id(), err)
 	}
@@ -306,8 +425,8 @@ func resourceVestackListenerRead(d *schema.ResourceData, meta interface{}) (err 
 }
 
 func resourceVestackListenerUpdate(d *schema.ResourceData, meta interface{}) (err error) {
-	listenerService := NewListenerService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Update(listenerService, d, ResourceVestackListener())
+	listenerService := NewListenerService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Update(listenerService, d, ResourceVestackListener())
 	if err != nil {
 		return fmt.Errorf("error on updating listener  %q, %w", d.Id(), err)
 	}
@@ -315,8 +434,8 @@ func resourceVestackListenerUpdate(d *schema.ResourceData, meta interface{}) (er
 }
 
 func resourceVestackListenerDelete(d *schema.ResourceData, meta interface{}) (err error) {
-	listenerService := NewListenerService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Delete(listenerService, d, ResourceVestackListener())
+	listenerService := NewListenerService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Delete(listenerService, d, ResourceVestackListener())
 	if err != nil {
 		return fmt.Errorf("error on deleting listener %q, %w", d.Id(), err)
 	}

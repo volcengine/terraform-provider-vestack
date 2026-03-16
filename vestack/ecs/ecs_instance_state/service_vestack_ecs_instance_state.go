@@ -45,6 +45,18 @@ func (s *VestackInstanceStateService) CreateResource(resourceData *schema.Resour
 		targetStatus = []string{"STOPPED"}
 	}
 
+	// 根据实例当前状态判断是否执行操作
+	update, err := s.describeCurrentStatus(resourceData, targetStatus)
+	if err != nil {
+		return []bp.Callback{{
+			Err: err,
+		}}
+	}
+	if !update {
+		resourceData.SetId(fmt.Sprintf("state:%v", resourceData.Get("instance_id")))
+		return []bp.Callback{}
+	}
+
 	callback := bp.Callback{
 		Call: bp.SdkCall{
 			Action:      action,
@@ -67,9 +79,9 @@ func (s *VestackInstanceStateService) CreateResource(resourceData *schema.Resour
 				)
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				if instanceAction == string(StartAction) {
-					resp, err = s.Client.EcsClient.StartInstanceCommon(call.SdkParam)
+					resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 				} else {
-					resp, err = s.Client.EcsClient.StopInstanceCommon(call.SdkParam)
+					resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 				}
 				logger.Debug(logger.RespFormat, call.Action, resp)
 				return resp, err
@@ -97,16 +109,15 @@ func (s *VestackInstanceStateService) ReadResources(condition map[string]interfa
 		ok      bool
 	)
 	return bp.WithPageNumberQuery(condition, "PageSize", "PageNumber", 20, 1, func(m map[string]interface{}) (data []interface{}, err error) {
-		ecs := s.Client.EcsClient
 		action := "DescribeInstances"
 		logger.Debug(logger.ReqFormat, action, condition)
 		if condition == nil {
-			resp, err = ecs.DescribeInstancesCommon(nil)
+			resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), nil)
 			if err != nil {
 				return data, err
 			}
 		} else {
-			resp, err = ecs.DescribeInstancesCommon(&condition)
+			resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), &condition)
 			if err != nil {
 				return data, err
 			}
@@ -215,6 +226,17 @@ func (s *VestackInstanceStateService) ModifyResource(resourceData *schema.Resour
 		targetStatus = []string{"STOPPED"}
 	}
 
+	// 根据实例当前状态判断是否执行操作
+	update, err := s.describeCurrentStatus(resourceData, targetStatus)
+	if err != nil {
+		return []bp.Callback{{
+			Err: err,
+		}}
+	}
+	if !update {
+		return []bp.Callback{}
+	}
+
 	strs := strings.Split(resourceData.Id(), ":")
 
 	callback := bp.Callback{
@@ -239,9 +261,9 @@ func (s *VestackInstanceStateService) ModifyResource(resourceData *schema.Resour
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				if instanceAction == string(StartAction) {
-					return s.Client.EcsClient.StartInstanceCommon(call.SdkParam)
+					return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 				} else {
-					return s.Client.EcsClient.StopInstanceCommon(call.SdkParam)
+					return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 				}
 			},
 			Refresh: &bp.StateRefresh{
@@ -263,4 +285,32 @@ func (s *VestackInstanceStateService) DatasourceResources(*schema.ResourceData, 
 
 func (s *VestackInstanceStateService) ReadResourceId(id string) string {
 	return id
+}
+
+func (s *VestackInstanceStateService) describeCurrentStatus(resourceData *schema.ResourceData, targetStatus []string) (bool, error) {
+	instanceId := resourceData.Get("instance_id").(string)
+	data, err := s.ReadResource(resourceData, "state:"+instanceId)
+	if err != nil {
+		return false, err
+	}
+	status, err := bp.ObtainSdkValue("Status", data)
+	if err != nil {
+		return false, err
+	}
+	for _, v := range targetStatus {
+		// 目标状态和当前状态相同时，不执行操作
+		if v == status.(string) {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func getUniversalInfo(actionName string) bp.UniversalInfo {
+	return bp.UniversalInfo{
+		ServiceName: "ecs",
+		Version:     "2020-04-01",
+		HttpMethod:  bp.GET,
+		Action:      actionName,
+	}
 }

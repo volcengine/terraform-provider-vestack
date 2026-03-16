@@ -3,7 +3,7 @@ package nat_gateway
 import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 func DataSourceVestackNatGateways() *schema.Resource {
@@ -25,7 +25,7 @@ func DataSourceVestackNatGateways() *schema.Resource {
 				ValidateFunc: validation.StringIsValidRegExp,
 				Description:  "The Name Regex of NatGateway.",
 			},
-			"tags": ve.TagsSchema(),
+			"tags": bp.TagsSchema(),
 
 			"output_file": {
 				Type:        schema.TypeString,
@@ -78,6 +78,11 @@ func DataSourceVestackNatGateways() *schema.Resource {
 							Type:        schema.TypeString,
 							Computed:    true,
 							Description: "The ID of the NatGateway.",
+						},
+						"network_type": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "The network type of the NatGateway.",
 						},
 						"nat_gateway_name": {
 							Type:        schema.TypeString,
@@ -173,7 +178,19 @@ func DataSourceVestackNatGateways() *schema.Resource {
 							Computed:    true,
 							Description: "The update time of the NatGateway.",
 						},
-						"tags": ve.TagsSchemaComputed(),
+						"tags": bp.TagsSchemaComputed(),
+						"snat_entry_ids": {
+							Type:        schema.TypeList,
+							Elem:        &schema.Schema{Type: schema.TypeString},
+							Computed:    true,
+							Description: "A list of snat entry ids.",
+						},
+						"dnat_entry_ids": {
+							Type:        schema.TypeList,
+							Elem:        &schema.Schema{Type: schema.TypeString},
+							Computed:    true,
+							Description: "A list of dnat entry ids.",
+						},
 					},
 				},
 			},
@@ -182,6 +199,6 @@ func DataSourceVestackNatGateways() *schema.Resource {
 }
 
 func dataSourceVestackNatGatewaysRead(d *schema.ResourceData, meta interface{}) error {
-	natGatewayService := NewNatGatewayService(meta.(*ve.SdkClient))
-	return ve.DefaultDispatcher().Data(natGatewayService, d, DataSourceVestackNatGateways())
+	natGatewayService := NewNatGatewayService(meta.(*bp.SdkClient))
+	return bp.DefaultDispatcher().Data(natGatewayService, d, DataSourceVestackNatGateways())
 }

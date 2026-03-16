@@ -3,7 +3,7 @@ package direct_connect_bgp_peer
 import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 func DataSourceVestackDirectConnectBgpPeers() *schema.Resource {
@@ -129,6 +129,6 @@ func DataSourceVestackDirectConnectBgpPeers() *schema.Resource {
 }
 
 func dataSourceVestackDirectConnectBgpPeersRead(d *schema.ResourceData, meta interface{}) error {
-	service := NewDirectConnectBgpPeerService(meta.(*ve.SdkClient))
+	service := NewDirectConnectBgpPeerService(meta.(*bp.SdkClient))
 	return service.Dispatcher.Data(service, d, DataSourceVestackDirectConnectBgpPeers())
 }

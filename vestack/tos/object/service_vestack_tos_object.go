@@ -1,10 +1,14 @@
 package object
 
 import (
+	"crypto/md5"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -63,6 +67,7 @@ func (s *VestackTosObjectService) ReadResource(resourceData *schema.ResourceData
 		header        http.Header
 		acl           map[string]interface{}
 		bucketVersion map[string]interface{}
+		tags          map[string]interface{}
 	)
 
 	if instanceId == "" {
@@ -184,6 +189,7 @@ func (s *VestackTosObjectService) ReadResource(resourceData *schema.ResourceData
 	if acl, ok = (*resp)[bp.BypassResponse].(map[string]interface{}); ok {
 		data["PublicAcl"] = acl
 		data["AccountAcl"] = acl
+		data["IsDefault"] = acl["IsDefault"]
 	}
 
 	action = "GetBucketVersioning"
@@ -200,6 +206,28 @@ func (s *VestackTosObjectService) ReadResource(resourceData *schema.ResourceData
 	}
 	if bucketVersion, ok = (*resp)[bp.BypassResponse].(map[string]interface{}); ok {
 		data["EnableVersion"] = bucketVersion
+	}
+
+	action = "GetObjectTagging"
+	req = map[string]interface{}{
+		"tagging": "",
+	}
+	logger.Debug(logger.ReqFormat, action, req)
+	resp, err = tos.DoBypassSvcCall(bp.BypassSvcInfo{
+		HttpMethod: bp.GET,
+		Domain:     bucketName,
+		//Path:       []string{instanceId, "?tagging="},
+		Path: []string{instanceId},
+	}, &req)
+	if err != nil && !bp.ResourceNotFoundError(err) {
+		return data, err
+	}
+	if tags, ok = (*resp)[bp.BypassResponse].(map[string]interface{}); ok {
+		if tagSet, exist := tags["TagSet"]; exist {
+			if tagMap, ok := tagSet.(map[string]interface{}); ok {
+				data["Tags"] = tagMap["Tags"]
+			}
+		}
 	}
 
 	if len(data) == 0 {
@@ -242,23 +270,65 @@ func (VestackTosObjectService) WithResourceResponseHandlers(m map[string]interfa
 }
 
 func (s *VestackTosObjectService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
+	var callbacks []bp.Callback
+
 	//create object
 	callback := s.createOrReplaceObject(resourceData, resource, false)
+	callbacks = append(callbacks, callback)
+
 	//acl
 	callbackAcl := s.createOrUpdateObjectAcl(resourceData, resource, false)
-	return []bp.Callback{callback, callbackAcl}
+	callbacks = append(callbacks, callbackAcl)
+
+	//tags
+	if _, ok := resourceData.GetOk("tags"); ok {
+		callbackTags := bp.Callback{
+			Call: bp.SdkCall{
+				ServiceCategory: bp.ServiceBypass,
+				Action:          "PutObjectTagging",
+				ConvertMode:     bp.RequestConvertInConvert,
+				ContentType:     bp.ContentTypeJson,
+				Convert: map[string]bp.RequestConvert{
+					"bucket_name": {
+						ConvertType: bp.ConvertDefault,
+						TargetField: "BucketName",
+						ForceGet:    true,
+						SpecialParam: &bp.SpecialParam{
+							Type: bp.DomainParam,
+						},
+					},
+					"object_name": {
+						ConvertType: bp.ConvertDefault,
+						TargetField: "ObjectName",
+						ForceGet:    true,
+						SpecialParam: &bp.SpecialParam{
+							Type:  bp.PathParam,
+							Index: 0,
+						},
+					},
+				},
+				BeforeCall:  s.beforePutObjectTagging(),
+				ExecuteCall: s.executePutObjectTagging(),
+			},
+		}
+		callbacks = append(callbacks, callbackTags)
+	}
+
+	return callbacks
 }
 
 func (s *VestackTosObjectService) ModifyResource(data *schema.ResourceData, resource *schema.Resource) []bp.Callback {
 	var callbacks []bp.Callback
 
-	if data.HasChange("file_path") || data.HasChanges("content_md5") {
+	if data.HasChange("file_path") || data.HasChanges("content_md5") || data.HasChanges("content") {
 		callbacks = append(callbacks, s.createOrReplaceObject(data, resource, true))
 		callbacks = append(callbacks, s.createOrUpdateObjectAcl(data, resource, true))
+		callbacks = s.setResourceTags(data, callbacks)
 	} else {
 		var grant = []string{
 			"public_acl",
 			"account_acl",
+			//"is_default",
 		}
 		for _, v := range grant {
 			if data.HasChange(v) {
@@ -267,6 +337,89 @@ func (s *VestackTosObjectService) ModifyResource(data *schema.ResourceData, reso
 				break
 			}
 		}
+
+		if data.HasChange("tags") {
+			callbacks = s.setResourceTags(data, callbacks)
+		}
+	}
+
+	return callbacks
+}
+
+func (s *VestackTosObjectService) setResourceTags(resourceData *schema.ResourceData, callbacks []bp.Callback) []bp.Callback {
+	if _, ok := resourceData.GetOk("tags"); ok {
+		addCallback := bp.Callback{
+			Call: bp.SdkCall{
+				ServiceCategory: bp.ServiceBypass,
+				Action:          "PutObjectTagging",
+				ConvertMode:     bp.RequestConvertInConvert,
+				Convert: map[string]bp.RequestConvert{
+					"bucket_name": {
+						ConvertType: bp.ConvertDefault,
+						TargetField: "BucketName",
+						ForceGet:    true,
+						SpecialParam: &bp.SpecialParam{
+							Type: bp.DomainParam,
+						},
+					},
+					"object_name": {
+						ConvertType: bp.ConvertDefault,
+						TargetField: "ObjectName",
+						ForceGet:    true,
+						SpecialParam: &bp.SpecialParam{
+							Type:  bp.PathParam,
+							Index: 0,
+						},
+					},
+				},
+				BeforeCall:  s.beforePutObjectTagging(),
+				ExecuteCall: s.executePutObjectTagging(),
+			},
+		}
+		callbacks = append(callbacks, addCallback)
+	} else {
+		removeCallback := bp.Callback{
+			Call: bp.SdkCall{
+				ServiceCategory: bp.ServiceBypass,
+				Action:          "DeleteObjectTagging",
+				ConvertMode:     bp.RequestConvertInConvert,
+				Convert: map[string]bp.RequestConvert{
+					"bucket_name": {
+						ConvertType: bp.ConvertDefault,
+						TargetField: "BucketName",
+						ForceGet:    true,
+						SpecialParam: &bp.SpecialParam{
+							Type: bp.DomainParam,
+						},
+					},
+					"object_name": {
+						ConvertType: bp.ConvertDefault,
+						TargetField: "ObjectName",
+						ForceGet:    true,
+						SpecialParam: &bp.SpecialParam{
+							Type:  bp.PathParam,
+							Index: 0,
+						},
+					},
+				},
+				BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+					(*call.SdkParam)[bp.BypassPath] = append((*call.SdkParam)[bp.BypassPath].([]string), "?tagging=")
+					return true, nil
+				},
+				ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+					logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
+					return s.Client.BypassSvcClient.DoBypassSvcCall(bp.BypassSvcInfo{
+						HttpMethod: bp.DELETE,
+						Domain:     (*call.SdkParam)[bp.BypassDomain].(string),
+						Path:       (*call.SdkParam)[bp.BypassPath].([]string),
+						UrlParam: map[string]string{
+							"tagging": "",
+						},
+					}, nil)
+				},
+			},
+		}
+		callbacks = append(callbacks, removeCallback)
 	}
 
 	return callbacks
@@ -292,7 +445,7 @@ func (s *VestackTosObjectService) RemoveResource(resourceData *schema.ResourceDa
 						_, err := s.Client.BypassSvcClient.DoBypassSvcCall(bp.BypassSvcInfo{
 							HttpMethod: bp.DELETE,
 							Domain:     (*call.SdkParam)["BucketName"].(string),
-							Path:       []string{(*call.SdkParam)["ObjectName"].(string)},
+							Path:       []string{(*call.SdkParam)["ObjectName"].(string), fmt.Sprintf("?versionId=%s", vv.(string))},
 						}, &condition)
 						if err != nil {
 							return nil, err
@@ -491,6 +644,11 @@ func (s *VestackTosObjectService) createOrUpdateObjectAcl(resourceData *schema.R
 						},
 					},
 				},
+				//"is_default": {
+				//	ConvertType: bp.ConvertDefault,
+				//	TargetField: "IsDefault",
+				//	ForceGet:    true,
+				//},
 			},
 			BeforeCall:  s.beforePutObjectAcl(),
 			ExecuteCall: s.executePutObjectAcl(),
@@ -511,6 +669,7 @@ func (s *VestackTosObjectService) createOrUpdateObjectAcl(resourceData *schema.R
 }
 
 func (s *VestackTosObjectService) createOrReplaceObject(resourceData *schema.ResourceData, resource *schema.Resource, isUpdate bool) bp.Callback {
+	name := fmt.Sprintf("./%d-temp", time.Now().Unix())
 	return bp.Callback{
 		Call: bp.SdkCall{
 			ServiceCategory: bp.ServiceBypass,
@@ -558,6 +717,13 @@ func (s *VestackTosObjectService) createOrReplaceObject(resourceData *schema.Res
 					},
 					ForceGet: isUpdate,
 				},
+				"content": {
+					ConvertType: bp.ConvertDefault,
+					TargetField: "Content",
+					SpecialParam: &bp.SpecialParam{
+						Type: bp.HeaderParam,
+					},
+				},
 				"content_md5": {
 					ConvertType: bp.ConvertDefault,
 					TargetField: "Content-MD5",
@@ -591,6 +757,15 @@ func (s *VestackTosObjectService) createOrReplaceObject(resourceData *schema.Res
 				if _, ok := (*call.SdkParam)[bp.BypassHeader].(map[string]string)["Content-MD5"]; ok {
 					(*call.SdkParam)[bp.BypassHeader].(map[string]string)["x-tos-meta-content-md5"] = d.Get("content_md5").(string)
 				}
+				if _, ok := (*call.SdkParam)[bp.BypassHeader].(map[string]string)["Content"]; ok {
+					content := []byte(d.Get("content").(string))
+					err := os.WriteFile(name, content, 0644)
+					if err != nil {
+						return false, err
+					}
+					(*call.SdkParam)[bp.BypassFilePath] = name
+					delete((*call.SdkParam)[bp.BypassHeader].(map[string]string), "Content")
+				}
 				return true, nil
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
@@ -606,8 +781,71 @@ func (s *VestackTosObjectService) createOrReplaceObject(resourceData *schema.Res
 			},
 			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 				d.SetId((*call.SdkParam)[bp.BypassDomain].(string) + ":" + (*call.SdkParam)[bp.BypassPath].([]string)[0])
-				return nil
+				_, err := os.Stat(name)
+				if err == nil {
+					return os.Remove(name)
+				}
+				if os.IsNotExist(err) {
+					return nil
+				}
+				return err
 			},
 		},
+	}
+}
+
+func (s *VestackTosObjectService) beforePutObjectTagging() bp.BeforeCallFunc {
+	return func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+		var tagsArr []interface{}
+		tags := d.Get("tags")
+		tagSet, ok := tags.(*schema.Set)
+		if !ok {
+			return false, fmt.Errorf("tags is not set")
+		}
+		for _, v := range tagSet.List() {
+			tagMap, ok := v.(map[string]interface{})
+			if !ok {
+				return false, fmt.Errorf("tags value is not set")
+			}
+			tagsArr = append(tagsArr, map[string]interface{}{
+				"Key":   tagMap["key"],
+				"Value": tagMap["value"],
+			})
+		}
+		tagsParam := make(map[string]interface{})
+		tagsParam["Tags"] = tagsArr
+
+		(*call.SdkParam)[bp.BypassParam].(map[string]interface{})["TagSet"] = tagsParam
+
+		bytes, err := json.Marshal((*call.SdkParam)[bp.BypassParam].(map[string]interface{}))
+		if err != nil {
+			return false, err
+		}
+		hash := md5.New()
+		io.WriteString(hash, string(bytes))
+		contentMd5 := base64.StdEncoding.EncodeToString(hash.Sum(nil))
+
+		(*call.SdkParam)[bp.BypassHeader].(map[string]string)["Content-MD5"] = contentMd5
+
+		//(*call.SdkParam)[bp.BypassPath] = append((*call.SdkParam)[bp.BypassPath].([]string), "?tagging=")
+		return true, nil
+	}
+}
+
+func (s *VestackTosObjectService) executePutObjectTagging() bp.ExecuteCallFunc {
+	return func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+		logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
+		//PutObjectTagging
+		condition := (*call.SdkParam)[bp.BypassParam].(map[string]interface{})
+		return s.Client.BypassSvcClient.DoBypassSvcCall(bp.BypassSvcInfo{
+			ContentType: bp.ApplicationJSON,
+			HttpMethod:  bp.PUT,
+			Domain:      (*call.SdkParam)[bp.BypassDomain].(string),
+			Header:      (*call.SdkParam)[bp.BypassHeader].(map[string]string),
+			Path:        (*call.SdkParam)[bp.BypassPath].([]string),
+			UrlParam: map[string]string{
+				"tagging": "",
+			},
+		}, &condition)
 	}
 }
