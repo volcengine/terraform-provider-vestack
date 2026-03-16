@@ -3,7 +3,7 @@ package traffic_mirror_session
 import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
-	bp "github.com/volcengine/terraform-provider-vestack/common"
+	ve "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 func DataSourceVestackTrafficMirrorSessions() *schema.Resource {
@@ -63,7 +63,7 @@ func DataSourceVestackTrafficMirrorSessions() *schema.Resource {
 				Optional:    true,
 				Description: "The project name of traffic mirror session.",
 			},
-			"tags": bp.TagsSchema(),
+			"tags": ve.TagsSchema(),
 			"name_regex": {
 				Type:         schema.TypeString,
 				Optional:     true,
@@ -161,7 +161,7 @@ func DataSourceVestackTrafficMirrorSessions() *schema.Resource {
 							Computed:    true,
 							Description: "The project name of traffic mirror session.",
 						},
-						"tags": bp.TagsSchemaComputed(),
+						"tags": ve.TagsSchemaComputed(),
 						"traffic_mirror_source_ids": {
 							Type:     schema.TypeList,
 							Computed: true,
@@ -178,6 +178,6 @@ func DataSourceVestackTrafficMirrorSessions() *schema.Resource {
 }
 
 func dataSourceVestackTrafficMirrorSessionsRead(d *schema.ResourceData, meta interface{}) error {
-	service := NewTrafficMirrorSessionService(meta.(*bp.SdkClient))
+	service := NewTrafficMirrorSessionService(meta.(*ve.SdkClient))
 	return service.Dispatcher.Data(service, d, DataSourceVestackTrafficMirrorSessions())
 }

@@ -3,7 +3,7 @@ package direct_connect_connection
 import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
-	bp "github.com/volcengine/terraform-provider-vestack/common"
+	ve "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 func DataSourceVestackDirectConnectConnections() *schema.Resource {
@@ -237,6 +237,6 @@ func DataSourceVestackDirectConnectConnections() *schema.Resource {
 }
 
 func dataSourceVestackDirectConnectConnectionsRead(d *schema.ResourceData, meta interface{}) error {
-	service := NewDirectConnectConnectionService(meta.(*bp.SdkClient))
+	service := NewDirectConnectConnectionService(meta.(*ve.SdkClient))
 	return service.Dispatcher.Data(service, d, DataSourceVestackDirectConnectConnections())
 }

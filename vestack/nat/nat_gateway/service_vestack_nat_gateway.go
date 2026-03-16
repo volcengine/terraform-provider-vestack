@@ -7,21 +7,21 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	bp "github.com/volcengine/terraform-provider-vestack/common"
+	ve "github.com/volcengine/terraform-provider-vestack/common"
 	"github.com/volcengine/terraform-provider-vestack/logger"
 )
 
 type VestackNatGatewayService struct {
-	Client *bp.SdkClient
+	Client *ve.SdkClient
 }
 
-func NewNatGatewayService(c *bp.SdkClient) *VestackNatGatewayService {
+func NewNatGatewayService(c *ve.SdkClient) *VestackNatGatewayService {
 	return &VestackNatGatewayService{
 		Client: c,
 	}
 }
 
-func (s *VestackNatGatewayService) GetClient() *bp.SdkClient {
+func (s *VestackNatGatewayService) GetClient() *ve.SdkClient {
 	return s.Client
 }
 
@@ -31,7 +31,7 @@ func (s *VestackNatGatewayService) ReadResources(condition map[string]interface{
 		results interface{}
 		ok      bool
 	)
-	return bp.WithPageNumberQuery(condition, "PageSize", "PageNumber", 20, 1, func(m map[string]interface{}) ([]interface{}, error) {
+	return ve.WithPageNumberQuery(condition, "PageSize", "PageNumber", 20, 1, func(m map[string]interface{}) ([]interface{}, error) {
 		action := "DescribeNatGateways"
 		logger.Debug(logger.ReqFormat, action, condition)
 		if condition == nil {
@@ -47,7 +47,7 @@ func (s *VestackNatGatewayService) ReadResources(condition map[string]interface{
 		}
 		logger.Debug(logger.RespFormat, "testDescribeNatGateways", condition, *resp)
 
-		results, err = bp.ObtainSdkValue("Result.NatGateways", *resp)
+		results, err = ve.ObtainSdkValue("Result.NatGateways", *resp)
 		if err != nil {
 			return data, err
 		}
@@ -104,7 +104,7 @@ func (s *VestackNatGatewayService) RefreshResourceState(resourceData *schema.Res
 			if err = resource.Retry(20*time.Minute, func() *resource.RetryError {
 				demo, err = s.ReadResource(resourceData, id)
 				if err != nil {
-					if bp.ResourceNotFoundError(err) {
+					if ve.ResourceNotFoundError(err) {
 						return resource.RetryableError(err)
 					} else {
 						return resource.NonRetryableError(err)
@@ -115,7 +115,7 @@ func (s *VestackNatGatewayService) RefreshResourceState(resourceData *schema.Res
 				return nil, "", err
 			}
 
-			status, err = bp.ObtainSdkValue("Status", demo)
+			status, err = ve.ObtainSdkValue("Status", demo)
 			if err != nil {
 				return nil, "", err
 			}
@@ -127,9 +127,9 @@ func (s *VestackNatGatewayService) RefreshResourceState(resourceData *schema.Res
 
 }
 
-func (VestackNatGatewayService) WithResourceResponseHandlers(natGateway map[string]interface{}) []bp.ResourceResponseHandler {
-	handler := func() (map[string]interface{}, map[string]bp.ResponseConvert, error) {
-		return natGateway, map[string]bp.ResponseConvert{
+func (VestackNatGatewayService) WithResourceResponseHandlers(natGateway map[string]interface{}) []ve.ResourceResponseHandler {
+	handler := func() (map[string]interface{}, map[string]ve.ResponseConvert, error) {
+		return natGateway, map[string]ve.ResponseConvert{
 			"BillingType": {
 				TargetField: "billing_type",
 				Convert: func(i interface{}) interface{} {
@@ -150,19 +150,19 @@ func (VestackNatGatewayService) WithResourceResponseHandlers(natGateway map[stri
 			},
 		}, nil
 	}
-	return []bp.ResourceResponseHandler{handler}
+	return []ve.ResourceResponseHandler{handler}
 
 }
 
-func (s *VestackNatGatewayService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
-	callback := bp.Callback{
-		Call: bp.SdkCall{
+func (s *VestackNatGatewayService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []ve.Callback {
+	callback := ve.Callback{
+		Call: ve.SdkCall{
 			Action:      "CreateNatGateway",
-			ConvertMode: bp.RequestConvertAll,
+			ConvertMode: ve.RequestConvertAll,
 			LockId: func(d *schema.ResourceData) string {
 				return d.Get("vpc_id").(string)
 			},
-			Convert: map[string]bp.RequestConvert{
+			Convert: map[string]ve.RequestConvert{
 				"billing_type": {
 					TargetField: "BillingType",
 					Convert: func(data *schema.ResourceData, i interface{}) interface{} {
@@ -183,45 +183,45 @@ func (s *VestackNatGatewayService) CreateResource(resourceData *schema.ResourceD
 				},
 				"tags": {
 					TargetField: "Tags",
-					ConvertType: bp.ConvertListN,
+					ConvertType: ve.ConvertListN,
 				},
 			},
-			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+			BeforeCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (bool, error) {
 				// PeriodUnit 默认传 Month
 				if (*call.SdkParam)["BillingType"] == 1 {
 					(*call.SdkParam)["PeriodUnit"] = "Month"
 				}
 				return true, nil
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				//创建natGateway
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
-			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
+			AfterCall: func(d *schema.ResourceData, client *ve.SdkClient, resp *map[string]interface{}, call ve.SdkCall) error {
 				//注意 获取内容 这个地方不能是指针 需要转一次
-				id, _ := bp.ObtainSdkValue("Result.NatGatewayId", *resp)
+				id, _ := ve.ObtainSdkValue("Result.NatGatewayId", *resp)
 				d.SetId(id.(string))
 				return nil
 			},
-			Refresh: &bp.StateRefresh{
+			Refresh: &ve.StateRefresh{
 				Target:  []string{"Available"},
 				Timeout: resourceData.Timeout(schema.TimeoutCreate),
 			},
 		},
 	}
-	return []bp.Callback{callback}
+	return []ve.Callback{callback}
 
 }
 
-func (s *VestackNatGatewayService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
-	var callbacks []bp.Callback
+func (s *VestackNatGatewayService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []ve.Callback {
+	var callbacks []ve.Callback
 
-	callback := bp.Callback{
-		Call: bp.SdkCall{
+	callback := ve.Callback{
+		Call: ve.SdkCall{
 			Action:      "ModifyNatGatewayAttributes",
-			ConvertMode: bp.RequestConvertInConvert,
-			Convert: map[string]bp.RequestConvert{
+			ConvertMode: ve.RequestConvertInConvert,
+			Convert: map[string]ve.RequestConvert{
 				"nat_gateway_name": {
 					TargetField: "NatGatewayName",
 				},
@@ -232,17 +232,17 @@ func (s *VestackNatGatewayService) ModifyResource(resourceData *schema.ResourceD
 					TargetField: "Spec",
 				},
 			},
-			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+			BeforeCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (bool, error) {
 				(*call.SdkParam)["NatGatewayId"] = d.Id()
 				delete(*call.SdkParam, "Tags")
 				return true, nil
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				//修改natGateway属性
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
-			Refresh: &bp.StateRefresh{
+			Refresh: &ve.StateRefresh{
 				Target:  []string{"Available"},
 				Timeout: resourceData.Timeout(schema.TimeoutCreate),
 			},
@@ -251,35 +251,35 @@ func (s *VestackNatGatewayService) ModifyResource(resourceData *schema.ResourceD
 	callbacks = append(callbacks, callback)
 
 	// 更新Tags
-	setResourceTagsCallbacks := bp.SetResourceTags(s.Client, "TagResources", "UntagResources", "ngw", resourceData, getVpcUniversalInfo)
+	setResourceTagsCallbacks := ve.SetResourceTags(s.Client, "TagResources", "UntagResources", "ngw", resourceData, getVpcUniversalInfo)
 	callbacks = append(callbacks, setResourceTagsCallbacks...)
 
 	return callbacks
 }
 
-func (s *VestackNatGatewayService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []bp.Callback {
+func (s *VestackNatGatewayService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []ve.Callback {
 	id := resourceData.Id()
-	callback := bp.Callback{
-		Call: bp.SdkCall{
+	callback := ve.Callback{
+		Call: ve.SdkCall{
 			Action:      "DeleteNatGateway",
-			ConvertMode: bp.RequestConvertIgnore,
+			ConvertMode: ve.RequestConvertIgnore,
 			SdkParam: &map[string]interface{}{
 				"NatGatewayId": id,
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				//删除NatGateway
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
-			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
+			AfterCall: func(d *schema.ResourceData, client *ve.SdkClient, resp *map[string]interface{}, call ve.SdkCall) error {
 				//由于异步删除问题 这里补充一个轮询查询(临时解决方案)
 				return resource.Retry(3*time.Minute, func() *resource.RetryError {
 					_, callErr := s.ReadResource(d, id)
 					//能查询成功代表还在删除中，重试
 					if callErr == nil {
-						return resource.RetryableError(fmt.Errorf("Nat still in remobp "))
+						return resource.RetryableError(fmt.Errorf("Nat still in remove "))
 					} else {
-						if bp.ResourceNotFoundError(callErr) {
+						if ve.ResourceNotFoundError(callErr) {
 							return nil
 						} else {
 							return resource.NonRetryableError(callErr)
@@ -287,12 +287,12 @@ func (s *VestackNatGatewayService) RemoveResource(resourceData *schema.ResourceD
 					}
 				})
 			},
-			CallError: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall, baseErr error) error {
+			CallError: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall, baseErr error) error {
 				//出现错误后重试
 				return resource.Retry(15*time.Minute, func() *resource.RetryError {
 					_, callErr := s.ReadResource(d, "")
 					if callErr != nil {
-						if bp.ResourceNotFoundError(callErr) {
+						if ve.ResourceNotFoundError(callErr) {
 							return nil
 						} else {
 							return resource.NonRetryableError(fmt.Errorf("error on  reading nat gateway on delete %q, %w", d.Id(), callErr))
@@ -307,20 +307,20 @@ func (s *VestackNatGatewayService) RemoveResource(resourceData *schema.ResourceD
 			},
 		},
 	}
-	return []bp.Callback{callback}
+	return []ve.Callback{callback}
 }
 
-func (s *VestackNatGatewayService) DatasourceResources(*schema.ResourceData, *schema.Resource) bp.DataSourceInfo {
-	return bp.DataSourceInfo{
-		RequestConverts: map[string]bp.RequestConvert{
+func (s *VestackNatGatewayService) DatasourceResources(*schema.ResourceData, *schema.Resource) ve.DataSourceInfo {
+	return ve.DataSourceInfo{
+		RequestConverts: map[string]ve.RequestConvert{
 			"ids": {
 				TargetField: "NatGatewayIds",
-				ConvertType: bp.ConvertWithN,
+				ConvertType: ve.ConvertWithN,
 			},
 			"tags": {
 				TargetField: "TagFilters",
-				ConvertType: bp.ConvertListN,
-				NextLevelConvert: map[string]bp.RequestConvert{
+				ConvertType: ve.ConvertListN,
+				NextLevelConvert: map[string]ve.RequestConvert{
 					"value": {
 						TargetField: "Values.1",
 					},
@@ -330,7 +330,7 @@ func (s *VestackNatGatewayService) DatasourceResources(*schema.ResourceData, *sc
 		NameField:    "NatGatewayName",
 		IdField:      "NatGatewayId",
 		CollectField: "nat_gateways",
-		ResponseConverts: map[string]bp.ResponseConvert{
+		ResponseConverts: map[string]ve.ResponseConvert{
 			"NatGatewayId": {
 				TargetField: "id",
 				KeepDefault: true,
@@ -361,28 +361,28 @@ func (s *VestackNatGatewayService) ReadResourceId(id string) string {
 	return id
 }
 
-func getUniversalInfo(actionName string) bp.UniversalInfo {
-	return bp.UniversalInfo{
+func getUniversalInfo(actionName string) ve.UniversalInfo {
+	return ve.UniversalInfo{
 		ServiceName: "natgateway",
 		Action:      actionName,
 		Version:     "2020-04-01",
-		HttpMethod:  bp.GET,
-		ContentType: bp.Default,
+		HttpMethod:  ve.GET,
+		ContentType: ve.Default,
 	}
 }
 
-func getVpcUniversalInfo(actionName string) bp.UniversalInfo {
-	return bp.UniversalInfo{
+func getVpcUniversalInfo(actionName string) ve.UniversalInfo {
+	return ve.UniversalInfo{
 		ServiceName: "vpc",
 		Version:     "2020-04-01",
-		HttpMethod:  bp.GET,
-		ContentType: bp.Default,
+		HttpMethod:  ve.GET,
+		ContentType: ve.Default,
 		Action:      actionName,
 	}
 }
 
-func (s *VestackNatGatewayService) ProjectTrn() *bp.ProjectTrn {
-	return &bp.ProjectTrn{
+func (s *VestackNatGatewayService) ProjectTrn() *ve.ProjectTrn {
+	return &ve.ProjectTrn{
 		ServiceName:          "natgateway",
 		ResourceType:         "ngw",
 		ProjectResponseField: "ProjectName",
@@ -390,8 +390,8 @@ func (s *VestackNatGatewayService) ProjectTrn() *bp.ProjectTrn {
 	}
 }
 
-func (s *VestackNatGatewayService) UnsubscribeInfo(resourceData *schema.ResourceData, resource *schema.Resource) (*bp.UnsubscribeInfo, error) {
-	info := bp.UnsubscribeInfo{
+func (s *VestackNatGatewayService) UnsubscribeInfo(resourceData *schema.ResourceData, resource *schema.Resource) (*ve.UnsubscribeInfo, error) {
+	info := ve.UnsubscribeInfo{
 		InstanceId: s.ReadResourceId(resourceData.Id()),
 	}
 	if resourceData.Get("billing_type") == "PrePaid" {

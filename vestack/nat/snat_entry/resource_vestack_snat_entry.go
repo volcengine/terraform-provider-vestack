@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	bp "github.com/volcengine/terraform-provider-vestack/common"
+	ve "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 /*
@@ -52,7 +52,7 @@ func ResourceVestackSnatEntry() *schema.Resource {
 			},
 			"eip_id": {
 				Type:     schema.TypeString,
-				Optional: true,
+				Required: true,
 				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
 					if len(old) != len(new) {
 						return false
@@ -63,14 +63,7 @@ func ResourceVestackSnatEntry() *schema.Resource {
 					sort.Strings(newArr)
 					return reflect.DeepEqual(oldArr, newArr)
 				},
-				ConflictsWith: []string{"nat_ip_id"},
-				Description:   "The id of the public ip address used by the SNAT entry. This field is required when the nat gateway is a internet NAT gateway.",
-			},
-			"nat_ip_id": {
-				Type:          schema.TypeString,
-				Optional:      true,
-				ConflictsWith: []string{"eip_id"},
-				Description:   "The ID of the intranet NAT gateway's transit IP. This field is required when the nat gateway is a intranet NAT gateway.",
+				Description: "The id of the public ip address used by the SNAT entry.",
 			},
 			"snat_entry_name": {
 				Type:        schema.TypeString,
@@ -96,32 +89,32 @@ func ResourceVestackSnatEntry() *schema.Resource {
 }
 
 func resourceVestackSnatEntryCreate(d *schema.ResourceData, meta interface{}) error {
-	snatEntryService := NewSnatEntryService(meta.(*bp.SdkClient))
-	if err := bp.DefaultDispatcher().Create(snatEntryService, d, ResourceVestackSnatEntry()); err != nil {
+	snatEntryService := NewSnatEntryService(meta.(*ve.SdkClient))
+	if err := ve.DefaultDispatcher().Create(snatEntryService, d, ResourceVestackSnatEntry()); err != nil {
 		return fmt.Errorf("error on creating snat entry  %q, %w", d.Id(), err)
 	}
 	return resourceVestackSnatEntryRead(d, meta)
 }
 
 func resourceVestackSnatEntryRead(d *schema.ResourceData, meta interface{}) error {
-	snatEntryService := NewSnatEntryService(meta.(*bp.SdkClient))
-	if err := bp.DefaultDispatcher().Read(snatEntryService, d, ResourceVestackSnatEntry()); err != nil {
+	snatEntryService := NewSnatEntryService(meta.(*ve.SdkClient))
+	if err := ve.DefaultDispatcher().Read(snatEntryService, d, ResourceVestackSnatEntry()); err != nil {
 		return fmt.Errorf("error on reading snat entry %q, %w", d.Id(), err)
 	}
 	return nil
 }
 
 func resourceVestackSnatEntryUpdate(d *schema.ResourceData, meta interface{}) error {
-	snatEntryService := NewSnatEntryService(meta.(*bp.SdkClient))
-	if err := bp.DefaultDispatcher().Update(snatEntryService, d, ResourceVestackSnatEntry()); err != nil {
+	snatEntryService := NewSnatEntryService(meta.(*ve.SdkClient))
+	if err := ve.DefaultDispatcher().Update(snatEntryService, d, ResourceVestackSnatEntry()); err != nil {
 		return fmt.Errorf("error on updating snat entry %q, %w", d.Id(), err)
 	}
 	return resourceVestackSnatEntryRead(d, meta)
 }
 
 func resourceVestackSnatEntryDelete(d *schema.ResourceData, meta interface{}) error {
-	snatEntryService := NewSnatEntryService(meta.(*bp.SdkClient))
-	if err := bp.DefaultDispatcher().Delete(snatEntryService, d, ResourceVestackSnatEntry()); err != nil {
+	snatEntryService := NewSnatEntryService(meta.(*ve.SdkClient))
+	if err := ve.DefaultDispatcher().Delete(snatEntryService, d, ResourceVestackSnatEntry()); err != nil {
 		return fmt.Errorf("error on deleting snat entry %q, %w", d.Id(), err)
 	}
 	return nil

@@ -8,23 +8,23 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	bp "github.com/volcengine/terraform-provider-vestack/common"
+	ve "github.com/volcengine/terraform-provider-vestack/common"
 	"github.com/volcengine/terraform-provider-vestack/logger"
 )
 
 type VestackDirectConnectBgpPeerService struct {
-	Client     *bp.SdkClient
-	Dispatcher *bp.Dispatcher
+	Client     *ve.SdkClient
+	Dispatcher *ve.Dispatcher
 }
 
-func NewDirectConnectBgpPeerService(c *bp.SdkClient) *VestackDirectConnectBgpPeerService {
+func NewDirectConnectBgpPeerService(c *ve.SdkClient) *VestackDirectConnectBgpPeerService {
 	return &VestackDirectConnectBgpPeerService{
 		Client:     c,
-		Dispatcher: &bp.Dispatcher{},
+		Dispatcher: &ve.Dispatcher{},
 	}
 }
 
-func (s *VestackDirectConnectBgpPeerService) GetClient() *bp.SdkClient {
+func (s *VestackDirectConnectBgpPeerService) GetClient() *ve.SdkClient {
 	return s.Client
 }
 
@@ -34,7 +34,7 @@ func (s *VestackDirectConnectBgpPeerService) ReadResources(m map[string]interfac
 		results interface{}
 		ok      bool
 	)
-	return bp.WithPageNumberQuery(m, "PageSize", "PageNumber", 100, 1, func(condition map[string]interface{}) ([]interface{}, error) {
+	return ve.WithPageNumberQuery(m, "PageSize", "PageNumber", 100, 1, func(condition map[string]interface{}) ([]interface{}, error) {
 		action := "DescribeBgpPeers"
 		bytes, _ := json.Marshal(condition)
 		logger.Debug(logger.ReqFormat, action, string(bytes))
@@ -51,7 +51,7 @@ func (s *VestackDirectConnectBgpPeerService) ReadResources(m map[string]interfac
 		}
 		respBytes, _ := json.Marshal(resp)
 		logger.Debug(logger.RespFormat, action, condition, string(respBytes))
-		results, err = bp.ObtainSdkValue("Result.BgpPeers", *resp)
+		results, err = ve.ObtainSdkValue("Result.BgpPeers", *resp)
 		if err != nil {
 			return data, err
 		}
@@ -109,7 +109,7 @@ func (s *VestackDirectConnectBgpPeerService) RefreshResourceState(resourceData *
 			if err != nil {
 				return nil, "", err
 			}
-			status, err = bp.ObtainSdkValue("Status", d)
+			status, err = ve.ObtainSdkValue("Status", d)
 			if err != nil {
 				return nil, "", err
 			}
@@ -123,45 +123,45 @@ func (s *VestackDirectConnectBgpPeerService) RefreshResourceState(resourceData *
 	}
 }
 
-func (s *VestackDirectConnectBgpPeerService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
-	callback := bp.Callback{
-		Call: bp.SdkCall{
+func (s *VestackDirectConnectBgpPeerService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []ve.Callback {
+	callback := ve.Callback{
+		Call: ve.SdkCall{
 			Action:      "CreateBgpPeer",
-			ConvertMode: bp.RequestConvertAll,
-			Convert:     map[string]bp.RequestConvert{},
-			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+			ConvertMode: ve.RequestConvertAll,
+			Convert:     map[string]ve.RequestConvert{},
+			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				resp, err := s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 				logger.Debug(logger.RespFormat, call.Action, resp, err)
 				return resp, err
 			},
-			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
-				id, _ := bp.ObtainSdkValue("Result.BgpPeerId", *resp)
+			AfterCall: func(d *schema.ResourceData, client *ve.SdkClient, resp *map[string]interface{}, call ve.SdkCall) error {
+				id, _ := ve.ObtainSdkValue("Result.BgpPeerId", *resp)
 				d.SetId(id.(string))
 				return nil
 			},
-			Refresh: &bp.StateRefresh{
+			Refresh: &ve.StateRefresh{
 				Target:  []string{"Available"},
 				Timeout: resourceData.Timeout(schema.TimeoutCreate),
 			},
 		},
 	}
-	return []bp.Callback{callback}
+	return []ve.Callback{callback}
 }
 
-func (VestackDirectConnectBgpPeerService) WithResourceResponseHandlers(d map[string]interface{}) []bp.ResourceResponseHandler {
-	handler := func() (map[string]interface{}, map[string]bp.ResponseConvert, error) {
+func (VestackDirectConnectBgpPeerService) WithResourceResponseHandlers(d map[string]interface{}) []ve.ResourceResponseHandler {
+	handler := func() (map[string]interface{}, map[string]ve.ResponseConvert, error) {
 		return d, nil, nil
 	}
-	return []bp.ResourceResponseHandler{handler}
+	return []ve.ResourceResponseHandler{handler}
 }
 
-func (s *VestackDirectConnectBgpPeerService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
-	callback := bp.Callback{
-		Call: bp.SdkCall{
+func (s *VestackDirectConnectBgpPeerService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []ve.Callback {
+	callback := ve.Callback{
+		Call: ve.SdkCall{
 			Action:      "ModifyBgpPeerAttributes",
-			ConvertMode: bp.RequestConvertInConvert,
-			Convert: map[string]bp.RequestConvert{
+			ConvertMode: ve.RequestConvertInConvert,
+			Convert: map[string]ve.RequestConvert{
 				"bgp_peer_name": {
 					TargetField: "BgpPeerName",
 				},
@@ -169,52 +169,52 @@ func (s *VestackDirectConnectBgpPeerService) ModifyResource(resourceData *schema
 					TargetField: "Description",
 				},
 			},
-			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+			BeforeCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (bool, error) {
 				(*call.SdkParam)["BgpPeerId"] = d.Id()
 				return true, nil
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
 				resp, err := s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 				logger.Debug(logger.RespFormat, call.Action, resp, err)
 				return resp, err
 			},
-			Refresh: &bp.StateRefresh{
+			Refresh: &ve.StateRefresh{
 				Target:  []string{"Available"},
 				Timeout: resourceData.Timeout(schema.TimeoutCreate),
 			},
 		},
 	}
-	return []bp.Callback{callback}
+	return []ve.Callback{callback}
 }
 
-func (s *VestackDirectConnectBgpPeerService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []bp.Callback {
-	callback := bp.Callback{
-		Call: bp.SdkCall{
+func (s *VestackDirectConnectBgpPeerService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []ve.Callback {
+	callback := ve.Callback{
+		Call: ve.SdkCall{
 			Action:      "DeleteBgpPeer",
-			ConvertMode: bp.RequestConvertIgnore,
-			ContentType: bp.ContentTypeJson,
+			ConvertMode: ve.RequestConvertIgnore,
+			ContentType: ve.ContentTypeJson,
 			SdkParam: &map[string]interface{}{
 				"BgpPeerId": resourceData.Id(),
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
-			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
-				return bp.CheckResourceUtilRemoved(d, s.ReadResource, 5*time.Minute)
+			AfterCall: func(d *schema.ResourceData, client *ve.SdkClient, resp *map[string]interface{}, call ve.SdkCall) error {
+				return ve.CheckResourceUtilRemoved(d, s.ReadResource, 5*time.Minute)
 			},
 		},
 	}
-	return []bp.Callback{callback}
+	return []ve.Callback{callback}
 }
 
-func (s *VestackDirectConnectBgpPeerService) DatasourceResources(*schema.ResourceData, *schema.Resource) bp.DataSourceInfo {
-	return bp.DataSourceInfo{
-		RequestConverts: map[string]bp.RequestConvert{
+func (s *VestackDirectConnectBgpPeerService) DatasourceResources(*schema.ResourceData, *schema.Resource) ve.DataSourceInfo {
+	return ve.DataSourceInfo{
+		RequestConverts: map[string]ve.RequestConvert{
 			"ids": {
 				TargetField: "BgpPeerIds",
-				ConvertType: bp.ConvertWithN,
+				ConvertType: ve.ConvertWithN,
 			},
 		},
 		NameField:    "BgpPeerName",
@@ -227,12 +227,12 @@ func (s *VestackDirectConnectBgpPeerService) ReadResourceId(id string) string {
 	return id
 }
 
-func getUniversalInfo(actionName string) bp.UniversalInfo {
-	return bp.UniversalInfo{
+func getUniversalInfo(actionName string) ve.UniversalInfo {
+	return ve.UniversalInfo{
 		ServiceName: "directconnect",
 		Version:     "2020-04-01",
-		HttpMethod:  bp.GET,
-		ContentType: bp.Default,
+		HttpMethod:  ve.GET,
+		ContentType: ve.Default,
 		Action:      actionName,
 	}
 }

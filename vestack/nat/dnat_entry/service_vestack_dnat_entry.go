@@ -7,15 +7,15 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	bp "github.com/volcengine/terraform-provider-vestack/common"
+	ve "github.com/volcengine/terraform-provider-vestack/common"
 	"github.com/volcengine/terraform-provider-vestack/logger"
 )
 
 type VestackDnatEntryService struct {
-	Client *bp.SdkClient
+	Client *ve.SdkClient
 }
 
-func (s *VestackDnatEntryService) GetClient() *bp.SdkClient {
+func (s *VestackDnatEntryService) GetClient() *ve.SdkClient {
 	return s.Client
 }
 
@@ -25,7 +25,7 @@ func (s *VestackDnatEntryService) ReadResources(m map[string]interface{}) (data 
 		results interface{}
 		ok      bool
 	)
-	return bp.WithPageNumberQuery(m, "PageSize", "PageNumber", 20, 1, func(condition map[string]interface{}) ([]interface{}, error) {
+	return ve.WithPageNumberQuery(m, "PageSize", "PageNumber", 20, 1, func(condition map[string]interface{}) ([]interface{}, error) {
 		action := "DescribeDnatEntries"
 		logger.Debug(logger.ReqFormat, action, condition)
 		if condition == nil {
@@ -40,7 +40,7 @@ func (s *VestackDnatEntryService) ReadResources(m map[string]interface{}) (data 
 			}
 		}
 
-		results, err = bp.ObtainSdkValue("Result.DnatEntries", *resp)
+		results, err = ve.ObtainSdkValue("Result.DnatEntries", *resp)
 		logger.Debug(logger.RespFormat, action, results)
 		if err != nil {
 			return data, err
@@ -99,7 +99,7 @@ func (s *VestackDnatEntryService) RefreshResourceState(resourceData *schema.Reso
 			if err != nil {
 				return nil, "", err
 			}
-			status, err = bp.ObtainSdkValue("Status", demo)
+			status, err = ve.ObtainSdkValue("Status", demo)
 			if err != nil {
 				return nil, "", err
 			}
@@ -114,85 +114,85 @@ func (s *VestackDnatEntryService) RefreshResourceState(resourceData *schema.Reso
 	}
 }
 
-func (s *VestackDnatEntryService) WithResourceResponseHandlers(m map[string]interface{}) []bp.ResourceResponseHandler {
-	handler := func() (map[string]interface{}, map[string]bp.ResponseConvert, error) {
+func (s *VestackDnatEntryService) WithResourceResponseHandlers(m map[string]interface{}) []ve.ResourceResponseHandler {
+	handler := func() (map[string]interface{}, map[string]ve.ResponseConvert, error) {
 		return m, nil, nil
 	}
-	return []bp.ResourceResponseHandler{handler}
+	return []ve.ResourceResponseHandler{handler}
 }
 
-func (s *VestackDnatEntryService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
-	callback := bp.Callback{
-		Call: bp.SdkCall{
+func (s *VestackDnatEntryService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []ve.Callback {
+	callback := ve.Callback{
+		Call: ve.SdkCall{
 			Action:      "CreateDnatEntry",
-			ConvertMode: bp.RequestConvertAll,
+			ConvertMode: ve.RequestConvertAll,
 			LockId: func(d *schema.ResourceData) string {
 				return d.Get("nat_gateway_id").(string)
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
-			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
-				id, _ := bp.ObtainSdkValue("Result.DnatEntryId", *resp)
+			AfterCall: func(d *schema.ResourceData, client *ve.SdkClient, resp *map[string]interface{}, call ve.SdkCall) error {
+				id, _ := ve.ObtainSdkValue("Result.DnatEntryId", *resp)
 				d.SetId(id.(string))
 				return nil
 			},
-			Refresh: &bp.StateRefresh{
+			Refresh: &ve.StateRefresh{
 				Target:  []string{"Available"},
 				Timeout: resourceData.Timeout(schema.TimeoutCreate),
 			},
 		},
 	}
-	return []bp.Callback{callback}
+	return []ve.Callback{callback}
 }
 
-func (s *VestackDnatEntryService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
-	callback := bp.Callback{
-		Call: bp.SdkCall{
+func (s *VestackDnatEntryService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []ve.Callback {
+	callback := ve.Callback{
+		Call: ve.SdkCall{
 			Action:      "ModifyDnatEntryAttributes",
-			ConvertMode: bp.RequestConvertAll,
-			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+			ConvertMode: ve.RequestConvertAll,
+			BeforeCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (bool, error) {
 				(*call.SdkParam)["DnatEntryId"] = d.Id()
 				return true, nil
 			},
 			LockId: func(d *schema.ResourceData) string {
 				return d.Get("nat_gateway_id").(string)
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
-			Refresh: &bp.StateRefresh{
+			Refresh: &ve.StateRefresh{
 				Target:  []string{"Available"},
 				Timeout: resourceData.Timeout(schema.TimeoutUpdate),
 			},
 		},
 	}
-	return []bp.Callback{callback}
+	return []ve.Callback{callback}
 }
 
-func (s *VestackDnatEntryService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []bp.Callback {
-	callback := bp.Callback{
-		Call: bp.SdkCall{
+func (s *VestackDnatEntryService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []ve.Callback {
+	callback := ve.Callback{
+		Call: ve.SdkCall{
 			Action:      "DeleteDnatEntry",
-			ConvertMode: bp.RequestConvertIgnore,
+			ConvertMode: ve.RequestConvertIgnore,
 			SdkParam: &map[string]interface{}{
 				"DnatEntryId": resourceData.Id(),
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
 			LockId: func(d *schema.ResourceData) string {
 				return d.Get("nat_gateway_id").(string)
 			},
-			CallError: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall, baseErr error) error {
+			CallError: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall, baseErr error) error {
 				//出现错误后重试
 				return resource.Retry(15*time.Minute, func() *resource.RetryError {
 					_, callErr := s.ReadResource(d, "")
 					if callErr != nil {
-						if bp.ResourceNotFoundError(callErr) {
+						if ve.ResourceNotFoundError(callErr) {
 							return nil
 						} else {
 							return resource.NonRetryableError(fmt.Errorf("error on reading snat entry on delete %q, %w", d.Id(), callErr))
@@ -205,31 +205,25 @@ func (s *VestackDnatEntryService) RemoveResource(resourceData *schema.ResourceDa
 					return resource.RetryableError(callErr)
 				})
 			},
-			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
-				return bp.CheckResourceUtilRemoved(d, s.ReadResource, 3*time.Minute)
+			AfterCall: func(d *schema.ResourceData, client *ve.SdkClient, resp *map[string]interface{}, call ve.SdkCall) error {
+				return ve.CheckResourceUtilRemoved(d, s.ReadResource, 3*time.Minute)
 			},
 		},
 	}
-	return []bp.Callback{callback}
+	return []ve.Callback{callback}
 }
 
-func (s *VestackDnatEntryService) DatasourceResources(data *schema.ResourceData, resource *schema.Resource) bp.DataSourceInfo {
-	return bp.DataSourceInfo{
-		RequestConverts: map[string]bp.RequestConvert{
+func (s *VestackDnatEntryService) DatasourceResources(data *schema.ResourceData, resource *schema.Resource) ve.DataSourceInfo {
+	return ve.DataSourceInfo{
+		RequestConverts: map[string]ve.RequestConvert{
 			"ids": {
 				TargetField: "DnatEntryIds",
-				ConvertType: bp.ConvertWithN,
+				ConvertType: ve.ConvertWithN,
 			},
 		},
 		NameField:    "DnatEntryName",
 		IdField:      "DnatEntryId",
 		CollectField: "dnat_entries",
-		ResponseConverts: map[string]bp.ResponseConvert{
-			"DnatEntryId": {
-				TargetField: "id",
-				KeepDefault: true,
-			},
-		},
 	}
 }
 
@@ -237,18 +231,18 @@ func (s *VestackDnatEntryService) ReadResourceId(id string) string {
 	return id
 }
 
-func NewDnatEntryService(c *bp.SdkClient) *VestackDnatEntryService {
+func NewDnatEntryService(c *ve.SdkClient) *VestackDnatEntryService {
 	return &VestackDnatEntryService{
 		Client: c,
 	}
 }
 
-func getUniversalInfo(actionName string) bp.UniversalInfo {
-	return bp.UniversalInfo{
+func getUniversalInfo(actionName string) ve.UniversalInfo {
+	return ve.UniversalInfo{
 		ServiceName: "natgateway",
 		Action:      actionName,
 		Version:     "2020-04-01",
-		HttpMethod:  bp.GET,
-		ContentType: bp.Default,
+		HttpMethod:  ve.GET,
+		ContentType: ve.Default,
 	}
 }

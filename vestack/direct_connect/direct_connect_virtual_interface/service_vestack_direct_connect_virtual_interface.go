@@ -8,23 +8,23 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	bp "github.com/volcengine/terraform-provider-vestack/common"
+	ve "github.com/volcengine/terraform-provider-vestack/common"
 	"github.com/volcengine/terraform-provider-vestack/logger"
 )
 
 type VestackDirectConnectVirtualInterfaceService struct {
-	Client     *bp.SdkClient
-	Dispatcher *bp.Dispatcher
+	Client     *ve.SdkClient
+	Dispatcher *ve.Dispatcher
 }
 
-func NewDirectConnectVirtualInterfaceService(c *bp.SdkClient) *VestackDirectConnectVirtualInterfaceService {
+func NewDirectConnectVirtualInterfaceService(c *ve.SdkClient) *VestackDirectConnectVirtualInterfaceService {
 	return &VestackDirectConnectVirtualInterfaceService{
 		Client:     c,
-		Dispatcher: &bp.Dispatcher{},
+		Dispatcher: &ve.Dispatcher{},
 	}
 }
 
-func (s *VestackDirectConnectVirtualInterfaceService) GetClient() *bp.SdkClient {
+func (s *VestackDirectConnectVirtualInterfaceService) GetClient() *ve.SdkClient {
 	return s.Client
 }
 
@@ -34,7 +34,7 @@ func (s *VestackDirectConnectVirtualInterfaceService) ReadResources(m map[string
 		results interface{}
 		ok      bool
 	)
-	return bp.WithPageNumberQuery(m, "PageSize", "PageNumber", 100, 1, func(condition map[string]interface{}) ([]interface{}, error) {
+	return ve.WithPageNumberQuery(m, "PageSize", "PageNumber", 100, 1, func(condition map[string]interface{}) ([]interface{}, error) {
 		action := "DescribeDirectConnectVirtualInterfaces"
 
 		bytes, _ := json.Marshal(condition)
@@ -52,7 +52,7 @@ func (s *VestackDirectConnectVirtualInterfaceService) ReadResources(m map[string
 		}
 		respBytes, _ := json.Marshal(resp)
 		logger.Debug(logger.RespFormat, action, condition, string(respBytes))
-		results, err = bp.ObtainSdkValue("Result.VirtualInterfaces", *resp)
+		results, err = ve.ObtainSdkValue("Result.VirtualInterfaces", *resp)
 		if err != nil {
 			return data, err
 		}
@@ -83,7 +83,7 @@ func (s *VestackDirectConnectVirtualInterfaceService) ReadResource(resourceData 
 	}
 	for _, v := range results {
 		if data, ok = v.(map[string]interface{}); !ok {
-			return data, errors.New("Value is not map ")
+			return data, errors.New("value is not map ")
 		}
 	}
 	if len(data) == 0 {
@@ -109,7 +109,7 @@ func (s *VestackDirectConnectVirtualInterfaceService) RefreshResourceState(resou
 			if err != nil {
 				return nil, "", err
 			}
-			status, err = bp.ObtainSdkValue("Status", d)
+			status, err = ve.ObtainSdkValue("Status", d)
 			if err != nil {
 				return nil, "", err
 			}
@@ -123,101 +123,101 @@ func (s *VestackDirectConnectVirtualInterfaceService) RefreshResourceState(resou
 	}
 }
 
-func (s *VestackDirectConnectVirtualInterfaceService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
-	callback := bp.Callback{
-		Call: bp.SdkCall{
+func (s *VestackDirectConnectVirtualInterfaceService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []ve.Callback {
+	callback := ve.Callback{
+		Call: ve.SdkCall{
 			Action:      "CreateDirectConnectVirtualInterface",
-			ConvertMode: bp.RequestConvertAll,
-			Convert: map[string]bp.RequestConvert{
+			ConvertMode: ve.RequestConvertAll,
+			Convert: map[string]ve.RequestConvert{
 				"tags": {
 					TargetField: "Tags",
-					ConvertType: bp.ConvertListN,
+					ConvertType: ve.ConvertListN,
 				},
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				resp, err := s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 				logger.Debug(logger.RespFormat, call.Action, resp, err)
 				return resp, err
 			},
-			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
-				id, _ := bp.ObtainSdkValue("Result.VirtualInterfaceId", *resp)
+			AfterCall: func(d *schema.ResourceData, client *ve.SdkClient, resp *map[string]interface{}, call ve.SdkCall) error {
+				id, _ := ve.ObtainSdkValue("Result.VirtualInterfaceId", *resp)
 				d.SetId(id.(string))
 				return nil
 			},
-			Refresh: &bp.StateRefresh{
+			Refresh: &ve.StateRefresh{
 				Target:  []string{"Available"},
 				Timeout: resourceData.Timeout(schema.TimeoutCreate),
 			},
 		},
 	}
-	return []bp.Callback{callback}
+	return []ve.Callback{callback}
 }
 
-func (VestackDirectConnectVirtualInterfaceService) WithResourceResponseHandlers(d map[string]interface{}) []bp.ResourceResponseHandler {
-	handler := func() (map[string]interface{}, map[string]bp.ResponseConvert, error) {
+func (VestackDirectConnectVirtualInterfaceService) WithResourceResponseHandlers(d map[string]interface{}) []ve.ResourceResponseHandler {
+	handler := func() (map[string]interface{}, map[string]ve.ResponseConvert, error) {
 		return d, nil, nil
 	}
-	return []bp.ResourceResponseHandler{handler}
+	return []ve.ResourceResponseHandler{handler}
 }
 
-func (s *VestackDirectConnectVirtualInterfaceService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
-	callback := bp.Callback{
-		Call: bp.SdkCall{
+func (s *VestackDirectConnectVirtualInterfaceService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []ve.Callback {
+	callback := ve.Callback{
+		Call: ve.SdkCall{
 			Action:      "ModifyDirectConnectVirtualInterfaceAttributes",
-			ConvertMode: bp.RequestConvertAll,
-			Convert:     map[string]bp.RequestConvert{},
-			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+			ConvertMode: ve.RequestConvertAll,
+			Convert:     map[string]ve.RequestConvert{},
+			BeforeCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (bool, error) {
 				(*call.SdkParam)["VirtualInterfaceId"] = d.Id()
 				return true, nil
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
 				resp, err := s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 				logger.Debug(logger.RespFormat, call.Action, resp, err)
 				return resp, err
 			},
-			Refresh: &bp.StateRefresh{
+			Refresh: &ve.StateRefresh{
 				Target:  []string{"Available"},
 				Timeout: resourceData.Timeout(schema.TimeoutCreate),
 			},
 		},
 	}
-	return []bp.Callback{callback}
+	return []ve.Callback{callback}
 }
 
-func (s *VestackDirectConnectVirtualInterfaceService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []bp.Callback {
-	callback := bp.Callback{
-		Call: bp.SdkCall{
+func (s *VestackDirectConnectVirtualInterfaceService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []ve.Callback {
+	callback := ve.Callback{
+		Call: ve.SdkCall{
 			Action:      "DeleteDirectConnectVirtualInterface",
-			ConvertMode: bp.RequestConvertIgnore,
-			ContentType: bp.ContentTypeJson,
+			ConvertMode: ve.RequestConvertIgnore,
+			ContentType: ve.ContentTypeJson,
 			SdkParam: &map[string]interface{}{
 				"VirtualInterfaceId": resourceData.Id(),
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
-			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
-				return bp.CheckResourceUtilRemoved(d, s.ReadResource, 5*time.Minute)
+			AfterCall: func(d *schema.ResourceData, client *ve.SdkClient, resp *map[string]interface{}, call ve.SdkCall) error {
+				return ve.CheckResourceUtilRemoved(d, s.ReadResource, 5*time.Minute)
 			},
 		},
 	}
-	return []bp.Callback{callback}
+	return []ve.Callback{callback}
 }
 
-func (s *VestackDirectConnectVirtualInterfaceService) DatasourceResources(*schema.ResourceData, *schema.Resource) bp.DataSourceInfo {
-	return bp.DataSourceInfo{
-		RequestConverts: map[string]bp.RequestConvert{
+func (s *VestackDirectConnectVirtualInterfaceService) DatasourceResources(*schema.ResourceData, *schema.Resource) ve.DataSourceInfo {
+	return ve.DataSourceInfo{
+		RequestConverts: map[string]ve.RequestConvert{
 			"ids": {
 				TargetField: "VirtualInterfaceIds",
-				ConvertType: bp.ConvertWithN,
+				ConvertType: ve.ConvertWithN,
 			},
 			"tag_filters": {
 				TargetField: "TagFilters",
-				ConvertType: bp.ConvertListN,
-				NextLevelConvert: map[string]bp.RequestConvert{
+				ConvertType: ve.ConvertListN,
+				NextLevelConvert: map[string]ve.RequestConvert{
 					"value": {
 						TargetField: "Values.1",
 					},
@@ -227,7 +227,7 @@ func (s *VestackDirectConnectVirtualInterfaceService) DatasourceResources(*schem
 		NameField:    "VirtualInterfaceName",
 		IdField:      "VirtualInterfaceId",
 		CollectField: "virtual_interfaces",
-		ResponseConverts: map[string]bp.ResponseConvert{
+		ResponseConverts: map[string]ve.ResponseConvert{
 			"VirtualInterfaceId": {
 				TargetField: "id",
 				KeepDefault: true,
@@ -240,12 +240,12 @@ func (s *VestackDirectConnectVirtualInterfaceService) ReadResourceId(id string) 
 	return id
 }
 
-func getUniversalInfo(actionName string) bp.UniversalInfo {
-	return bp.UniversalInfo{
+func getUniversalInfo(actionName string) ve.UniversalInfo {
+	return ve.UniversalInfo{
 		ServiceName: "directconnect",
 		Version:     "2020-04-01",
-		HttpMethod:  bp.GET,
-		ContentType: bp.Default,
+		HttpMethod:  ve.GET,
+		ContentType: ve.Default,
 		Action:      actionName,
 	}
 }

@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	bp "github.com/volcengine/terraform-provider-vestack/common"
+	ve "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 /*
@@ -13,7 +13,7 @@ import (
 Import
 TrafficMirrorTarget can be imported using the id, e.g.
 ```
-$ terraform import vestack_traffic_mirror_target.default resource_id
+$ terraform import volcengine_traffic_mirror_target.default resource_id
 ```
 
 */
@@ -62,7 +62,7 @@ func ResourceVestackTrafficMirrorTarget() *schema.Resource {
 				Computed:    true,
 				Description: "The project name of traffic mirror target.",
 			},
-			"tags": bp.TagsSchema(),
+			"tags": ve.TagsSchema(),
 
 			// computed fields
 			"status": {
@@ -86,7 +86,7 @@ func ResourceVestackTrafficMirrorTarget() *schema.Resource {
 }
 
 func resourceVestackTrafficMirrorTargetCreate(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewTrafficMirrorTargetService(meta.(*bp.SdkClient))
+	service := NewTrafficMirrorTargetService(meta.(*ve.SdkClient))
 	err = service.Dispatcher.Create(service, d, ResourceVestackTrafficMirrorTarget())
 	if err != nil {
 		return fmt.Errorf("error on creating traffic_mirror_target %q, %s", d.Id(), err)
@@ -95,7 +95,7 @@ func resourceVestackTrafficMirrorTargetCreate(d *schema.ResourceData, meta inter
 }
 
 func resourceVestackTrafficMirrorTargetRead(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewTrafficMirrorTargetService(meta.(*bp.SdkClient))
+	service := NewTrafficMirrorTargetService(meta.(*ve.SdkClient))
 	err = service.Dispatcher.Read(service, d, ResourceVestackTrafficMirrorTarget())
 	if err != nil {
 		return fmt.Errorf("error on reading traffic_mirror_target %q, %s", d.Id(), err)
@@ -104,7 +104,7 @@ func resourceVestackTrafficMirrorTargetRead(d *schema.ResourceData, meta interfa
 }
 
 func resourceVestackTrafficMirrorTargetUpdate(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewTrafficMirrorTargetService(meta.(*bp.SdkClient))
+	service := NewTrafficMirrorTargetService(meta.(*ve.SdkClient))
 	err = service.Dispatcher.Update(service, d, ResourceVestackTrafficMirrorTarget())
 	if err != nil {
 		return fmt.Errorf("error on updating traffic_mirror_target %q, %s", d.Id(), err)
@@ -113,7 +113,7 @@ func resourceVestackTrafficMirrorTargetUpdate(d *schema.ResourceData, meta inter
 }
 
 func resourceVestackTrafficMirrorTargetDelete(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewTrafficMirrorTargetService(meta.(*bp.SdkClient))
+	service := NewTrafficMirrorTargetService(meta.(*ve.SdkClient))
 	err = service.Dispatcher.Delete(service, d, ResourceVestackTrafficMirrorTarget())
 	if err != nil {
 		return fmt.Errorf("error on deleting traffic_mirror_target %q, %s", d.Id(), err)

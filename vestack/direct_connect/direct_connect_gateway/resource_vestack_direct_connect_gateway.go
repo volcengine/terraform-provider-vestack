@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	bp "github.com/volcengine/terraform-provider-vestack/common"
+	ve "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 /*
@@ -51,7 +51,7 @@ func ResourceVestackDirectConnectGateway() *schema.Resource {
 					Schema: map[string]*schema.Schema{
 						"key": {
 							Type:        schema.TypeString,
-							Optional:    true,
+							Required:    true,
 							Description: "The tag key.",
 						},
 						"value": {
@@ -68,7 +68,7 @@ func ResourceVestackDirectConnectGateway() *schema.Resource {
 }
 
 func resourceVestackDirectConnectGatewayCreate(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewDirectConnectGatewayService(meta.(*bp.SdkClient))
+	service := NewDirectConnectGatewayService(meta.(*ve.SdkClient))
 	err = service.Dispatcher.Create(service, d, ResourceVestackDirectConnectGateway())
 	if err != nil {
 		return fmt.Errorf("error on creating direct_connect_gateway %q, %s", d.Id(), err)
@@ -77,7 +77,7 @@ func resourceVestackDirectConnectGatewayCreate(d *schema.ResourceData, meta inte
 }
 
 func resourceVestackDirectConnectGatewayRead(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewDirectConnectGatewayService(meta.(*bp.SdkClient))
+	service := NewDirectConnectGatewayService(meta.(*ve.SdkClient))
 	err = service.Dispatcher.Read(service, d, ResourceVestackDirectConnectGateway())
 	if err != nil {
 		return fmt.Errorf("error on reading direct_connect_gateway %q, %s", d.Id(), err)
@@ -86,7 +86,7 @@ func resourceVestackDirectConnectGatewayRead(d *schema.ResourceData, meta interf
 }
 
 func resourceVestackDirectConnectGatewayUpdate(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewDirectConnectGatewayService(meta.(*bp.SdkClient))
+	service := NewDirectConnectGatewayService(meta.(*ve.SdkClient))
 	err = service.Dispatcher.Update(service, d, ResourceVestackDirectConnectGateway())
 	if err != nil {
 		return fmt.Errorf("error on updating direct_connect_gateway %q, %s", d.Id(), err)
@@ -95,7 +95,7 @@ func resourceVestackDirectConnectGatewayUpdate(d *schema.ResourceData, meta inte
 }
 
 func resourceVestackDirectConnectGatewayDelete(d *schema.ResourceData, meta interface{}) (err error) {
-	service := NewDirectConnectGatewayService(meta.(*bp.SdkClient))
+	service := NewDirectConnectGatewayService(meta.(*ve.SdkClient))
 	err = service.Dispatcher.Delete(service, d, ResourceVestackDirectConnectGateway())
 	if err != nil {
 		return fmt.Errorf("error on deleting direct_connect_gateway %q, %s", d.Id(), err)
