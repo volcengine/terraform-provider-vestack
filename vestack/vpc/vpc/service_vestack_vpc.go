@@ -188,6 +188,9 @@ func (s *VestackVpcService) ModifyResource(resourceData *schema.ResourceData, re
 					TargetField: "DnsServers",
 					ConvertType: bp.ConvertWithN,
 				},
+				"project_name": {
+					ConvertType: bp.ConvertDefault,
+				},
 			},
 			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 				(*call.SdkParam)["VpcId"] = d.Id()
