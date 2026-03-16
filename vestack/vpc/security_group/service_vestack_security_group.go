@@ -33,15 +33,16 @@ func (s *VestackSecurityGroupService) ReadResources(m map[string]interface{}) (d
 		ok      bool
 	)
 	return bp.WithPageNumberQuery(m, "PageSize", "PageNumber", 20, 1, func(condition map[string]interface{}) ([]interface{}, error) {
+		vpcClient := s.Client.VpcClient
 		action := "DescribeSecurityGroups"
 		logger.Debug(logger.ReqFormat, action, condition)
 		if condition == nil {
-			resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), nil)
+			resp, err = vpcClient.DescribeSecurityGroupsCommon(nil)
 			if err != nil {
 				return data, err
 			}
 		} else {
-			resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), &condition)
+			resp, err = vpcClient.DescribeSecurityGroupsCommon(&condition)
 			if err != nil {
 				return data, err
 			}
@@ -58,7 +59,7 @@ func (s *VestackSecurityGroupService) ReadResources(m map[string]interface{}) (d
 		if data, ok = results.([]interface{}); !ok {
 			return data, errors.New("Result.SecurityGroups is not Slice")
 		}
-		logger.Debug(logger.ReqFormat, "DescribeSecurityGroups", data)
+		logger.Debug(logger.ReqFormat, "", data)
 
 		return data, err
 	})
@@ -147,11 +148,8 @@ func (s *VestackSecurityGroupService) CreateResource(resourceData *schema.Resour
 				return d.Get("vpc_id").(string)
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
-				// 兼容逻辑
-				(*call.SdkParam)["ServiceManaged"] = false
-
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
-				resp, err := s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
+				resp, err := s.Client.VpcClient.CreateSecurityGroupCommon(call.SdkParam)
 				logger.Debug(logger.RespFormat, call.Action, resp, err)
 				return resp, err
 			},
@@ -193,7 +191,7 @@ func (s *VestackSecurityGroupService) ModifyResource(resourceData *schema.Resour
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
-				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
+				return s.Client.VpcClient.ModifySecurityGroupAttributesCommon(call.SdkParam)
 			},
 			Refresh: &bp.StateRefresh{
 				Target:  []string{"Available"},
@@ -230,7 +228,7 @@ func (s *VestackSecurityGroupService) RemoveResource(resourceData *schema.Resour
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
-				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
+				return s.Client.VpcClient.DeleteSecurityGroupCommon(call.SdkParam)
 			},
 			CallError: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall, baseErr error) error {
 				//出现错误后重试
