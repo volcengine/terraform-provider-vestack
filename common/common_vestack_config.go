@@ -57,9 +57,9 @@ func (c *Config) Client() (*SdkClient, error) {
 	var client SdkClient
 	version := fmt.Sprintf("%s/%s", TerraformProviderName, TerraformProviderVersion)
 
-	config := vestack.NewConfig().
+	config := volcengine.NewConfig().
 		WithRegion(c.Region).
-		WithExtraUserAgent(vestack.String(version)).
+		WithExtraUserAgent(volcengine.String(version)).
 		WithCredentials(credentials.NewStaticCredentials(c.AccessKey, c.SecretKey, c.SessionToken)).
 		WithDisableSSL(c.DisableSSL).
 		WithExtendHttpRequest(func(ctx context.Context, request *http.Request) {
@@ -69,7 +69,7 @@ func (c *Config) Client() (*SdkClient, error) {
 				}
 			}
 		}).
-		WithEndpoint(vestackutil.NewEndpoint().WithCustomerEndpoint(c.Endpoint).GetEndpoint())
+		WithEndpoint(volcengineutil.NewEndpoint().WithCustomerEndpoint(c.Endpoint).GetEndpoint())
 
 	if c.ProxyUrl != "" {
 		u, _ := url.Parse(c.ProxyUrl)

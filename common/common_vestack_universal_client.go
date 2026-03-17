@@ -120,11 +120,11 @@ func (u *Universal) newTargetClient(info UniversalInfo) *client.Client {
 	)
 	c.Handlers.Build.PushBackNamed(corehandlers.SDKVersionUserAgentHandler)
 	c.Handlers.Build.PushBackNamed(corehandlers.AddHostExecEnvUserAgentHandler)
-	c.Handlers.Sign.PushBackNamed(bp.SignRequestHandler)
-	c.Handlers.Build.PushBackNamed(vestackquery.BuildHandler)
-	c.Handlers.Unmarshal.PushBackNamed(vestackquery.UnmarshalHandler)
-	c.Handlers.UnmarshalMeta.PushBackNamed(vestackquery.UnmarshalMetaHandler)
-	c.Handlers.UnmarshalError.PushBackNamed(vestackquery.UnmarshalErrorHandler)
+	c.Handlers.Sign.PushBackNamed(volc.SignRequestHandler)
+	c.Handlers.Build.PushBackNamed(volcenginequery.BuildHandler)
+	c.Handlers.Unmarshal.PushBackNamed(volcenginequery.UnmarshalHandler)
+	c.Handlers.UnmarshalMeta.PushBackNamed(volcenginequery.UnmarshalMetaHandler)
+	c.Handlers.UnmarshalError.PushBackNamed(volcenginequery.UnmarshalErrorHandler)
 
 	return c
 }

@@ -50,10 +50,10 @@ func init() {
 	}
 }
 
-type Rate struct {
-	Limiter   *rate.Limiter
-	Semaphore *semaphore.Weighted
-}
+//type Rate struct {
+//	Limiter   *rate.Limiter
+//	Semaphore *semaphore.Weighted
+//}
 
 func GetRateInfoMap(svc, action, version string) *Rate {
 	key := fmt.Sprintf("%s.%s.%s", svc, action, version)

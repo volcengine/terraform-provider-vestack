@@ -48,7 +48,7 @@ func (u *BypassSvc) NewTlsClient() *client.Client {
 	)
 	c.Handlers.Build.PushBackNamed(corehandlers.SDKVersionUserAgentHandler)
 	c.Handlers.Build.PushBackNamed(corehandlers.AddHostExecEnvUserAgentHandler)
-	c.Handlers.Sign.PushBackNamed(bp.SignRequestHandler)
+	c.Handlers.Sign.PushBackNamed(volc.SignRequestHandler)
 	c.Handlers.Build.PushBackNamed(bypassBuildHandler)
 	c.Handlers.Unmarshal.PushBackNamed(bypassUnmarshalHandler)
 	c.Handlers.UnmarshalError.PushBackNamed(tlsUnmarshalErrorHandler)
@@ -77,16 +77,16 @@ func tlsUnmarshalError(r *request.Request) {
 			r.Error = err
 			return
 		}
-		r.Error = vestackerr.NewRequestFailure(
-			vestackerr.New(tos.ErrorCode, tos.ErrorMessage, nil),
+		r.Error = volcengineerr.NewRequestFailure(
+			volcengineerr.New(tos.ErrorCode, tos.ErrorMessage, nil),
 			r.HTTPResponse.StatusCode,
 			r.HTTPResponse.Header.Get("X-Tls-Requestid"),
 		)
 
 		return
 	} else {
-		r.Error = vestackerr.NewRequestFailure(
-			vestackerr.New("ServiceUnavailableException", "service is unavailable", nil),
+		r.Error = volcengineerr.NewRequestFailure(
+			volcengineerr.New("ServiceUnavailableException", "service is unavailable", nil),
 			r.HTTPResponse.StatusCode,
 			r.RequestID,
 		)

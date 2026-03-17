@@ -7,7 +7,7 @@ import (
 )
 
 func ResourceNotFoundError(err error) bool {
-	if e, ok := err.(vestackerr.RequestFailure); ok && e.StatusCode() == 404 {
+	if e, ok := err.(volcengineerr.RequestFailure); ok && e.StatusCode() == 404 {
 		return true
 	}
 	errMessage := strings.ToLower(err.Error())

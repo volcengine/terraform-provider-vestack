@@ -82,7 +82,7 @@ func tosSign(req *request.Request) {
 		c Credentials
 	)
 
-	region := vestack.StringValue(req.Config.Region)
+	region := volcengine.StringValue(req.Config.Region)
 
 	//name := req.ClientInfo.SigningName
 	//if name == "" {
@@ -362,16 +362,16 @@ func tosUnmarshalError(r *request.Request) {
 				return
 			}
 		}
-		r.Error = vestackerr.NewRequestFailure(
-			vestackerr.New(tos.Code, tos.Message, nil),
+		r.Error = volcengineerr.NewRequestFailure(
+			volcengineerr.New(tos.Code, tos.Message, nil),
 			r.HTTPResponse.StatusCode,
 			tos.RequestId,
 		)
 
 		return
 	} else {
-		r.Error = vestackerr.NewRequestFailure(
-			vestackerr.New("ServiceUnavailableException", "service is unavailable", nil),
+		r.Error = volcengineerr.NewRequestFailure(
+			volcengineerr.New("ServiceUnavailableException", "service is unavailable", nil),
 			r.HTTPResponse.StatusCode,
 			r.RequestID,
 		)

@@ -47,7 +47,7 @@ func bypassBuild(r *request.Request) {
 		r.HTTPRequest.Header.Set("Content-Type", contentType)
 		if strings.Contains(strings.ToLower(contentType), "application/json") {
 			if r.HTTPRequest.Header.Get("Content-Length") == "" {
-				vestackbody.BodyJson(&body, r)
+				volcenginebody.BodyJson(&body, r)
 			}
 		}
 	} else if strings.ToUpper(r.HTTPRequest.Method) == "GET" && strings.Contains(strings.ToLower(contentType), "application/json") &&
@@ -60,7 +60,7 @@ func bypassBuild(r *request.Request) {
 				if strings.ToUpper(method) == "GET" {
 					r.HTTPRequest.Method = "POST"
 				}
-				vestackbody.BodyJson(&body, r)
+				volcenginebody.BodyJson(&body, r)
 				if strings.ToUpper(method) == "GET" {
 					r.HTTPRequest.Method = "GET"
 				}
@@ -70,7 +70,7 @@ func bypassBuild(r *request.Request) {
 		if len(contentType) > 0 && !strings.Contains(strings.ToLower(contentType), "x-www-form-urlencoded") {
 			r.HTTPRequest.Header.Del("Content-Type")
 		}
-		vestackbody.BodyParam(&body, r)
+		volcenginebody.BodyParam(&body, r)
 		if len(contentType) > 0 {
 			r.HTTPRequest.Header.Set("Content-Type", contentType)
 		}
