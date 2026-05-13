@@ -10,6 +10,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	bp "github.com/volcengine/terraform-provider-vestack/common"
 	"github.com/volcengine/terraform-provider-vestack/logger"
+	"github.com/volcengine/terraform-provider-vestack/vestack/vpc/route_table"
+	"github.com/volcengine/terraform-provider-vestack/vestack/vpc/vpc"
 )
 
 type VestackRouteEntryService struct {
@@ -37,16 +39,15 @@ func (s *VestackRouteEntryService) ReadResources(m map[string]interface{}) (data
 		ok      bool
 	)
 	entries, err = bp.WithPageNumberQuery(m, "PageSize", "PageNumber", 20, 1, func(condition map[string]interface{}) ([]interface{}, error) {
-		vpcClient := s.Client.VpcClient
 		action := "DescribeRouteEntryList"
 		logger.Debug(logger.ReqFormat, action, condition)
 		if condition == nil {
-			resp, err = vpcClient.DescribeRouteEntryListCommon(nil)
+			resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), nil)
 			if err != nil {
 				return data, err
 			}
 		} else {
-			resp, err = vpcClient.DescribeRouteEntryListCommon(&condition)
+			resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), &condition)
 			if err != nil {
 				return data, err
 			}
@@ -162,13 +163,23 @@ func (VestackRouteEntryService) WithResourceResponseHandlers(entries map[string]
 }
 
 func (s *VestackRouteEntryService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
+	var vpcId string
 	callback := bp.Callback{
 		Call: bp.SdkCall{
 			Action:      "CreateRouteEntry",
 			ConvertMode: bp.RequestConvertAll,
+			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+				routeTableId := resourceData.Get("route_table_id").(string)
+				resp, err := route_table.NewRouteTableService(s.Client).ReadResource(resourceData, routeTableId)
+				if err != nil {
+					return false, err
+				}
+				vpcId = resp["VpcId"].(string)
+				return true, nil
+			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
-				return s.Client.VpcClient.CreateRouteEntryCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
 			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam, resp)
@@ -176,9 +187,22 @@ func (s *VestackRouteEntryService) CreateResource(resourceData *schema.ResourceD
 				d.SetId(fmt.Sprint((*call.SdkParam)["RouteTableId"], ":", id))
 				return nil
 			},
+			LockId: func(d *schema.ResourceData) string {
+				return d.Get("route_table_id").(string)
+			},
 			Refresh: &bp.StateRefresh{
 				Target:  []string{"Available"},
 				Timeout: resourceData.Timeout(schema.TimeoutCreate),
+			},
+			// 外部定义vpcId无法传入ExtraRefresh中
+			ExtraRefreshCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (map[bp.ResourceService]*bp.StateRefresh, error) {
+				return map[bp.ResourceService]*bp.StateRefresh{
+					vpc.NewVpcService(s.Client): {
+						Target:     []string{"Available"},
+						Timeout:    resourceData.Timeout(schema.TimeoutCreate),
+						ResourceId: vpcId,
+					},
+				}, nil
 			},
 		},
 	}
@@ -187,21 +211,42 @@ func (s *VestackRouteEntryService) CreateResource(resourceData *schema.ResourceD
 
 func (s *VestackRouteEntryService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
 	ids := strings.Split(s.ReadResourceId(resourceData.Id()), ":")
+	var vpcId string
 	callback := bp.Callback{
 		Call: bp.SdkCall{
 			Action:      "ModifyRouteEntry",
 			ConvertMode: bp.RequestConvertAll,
 			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+				routeTableId := resourceData.Get("route_table_id").(string)
+				resp, err := route_table.NewRouteTableService(s.Client).ReadResource(resourceData, routeTableId)
+				if err != nil {
+					return false, err
+				}
+				vpcId = resp["VpcId"].(string)
+
 				(*call.SdkParam)["RouteEntryId"] = ids[1]
 				return true, nil
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
-				return s.Client.VpcClient.ModifyRouteEntryCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
+			},
+			LockId: func(d *schema.ResourceData) string {
+				return d.Get("route_table_id").(string)
 			},
 			Refresh: &bp.StateRefresh{
 				Target:  []string{"Available"},
 				Timeout: resourceData.Timeout(schema.TimeoutUpdate),
+			},
+			// 外部定义vpcId无法传入ExtraRefresh中
+			ExtraRefreshCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (map[bp.ResourceService]*bp.StateRefresh, error) {
+				return map[bp.ResourceService]*bp.StateRefresh{
+					vpc.NewVpcService(s.Client): {
+						Target:     []string{"Available"},
+						Timeout:    resourceData.Timeout(schema.TimeoutCreate),
+						ResourceId: vpcId,
+					},
+				}, nil
 			},
 		},
 	}
@@ -210,6 +255,7 @@ func (s *VestackRouteEntryService) ModifyResource(resourceData *schema.ResourceD
 
 func (s *VestackRouteEntryService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []bp.Callback {
 	ids := strings.Split(resourceData.Id(), ":")
+	var vpcId string
 	callback := bp.Callback{
 		Call: bp.SdkCall{
 			Action:      "DeleteRouteEntry",
@@ -217,9 +263,31 @@ func (s *VestackRouteEntryService) RemoveResource(resourceData *schema.ResourceD
 			SdkParam: &map[string]interface{}{
 				"RouteEntryId": ids[1],
 			},
+			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+				routeTableId := resourceData.Get("route_table_id").(string)
+				resp, err := route_table.NewRouteTableService(s.Client).ReadResource(resourceData, routeTableId)
+				if err != nil {
+					return false, err
+				}
+				vpcId = resp["VpcId"].(string)
+				return true, nil
+			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
-				return s.Client.VpcClient.DeleteRouteEntryCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
+			},
+			LockId: func(d *schema.ResourceData) string {
+				return d.Get("route_table_id").(string)
+			},
+			// 外部定义vpcId无法传入ExtraRefresh中
+			ExtraRefreshCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (map[bp.ResourceService]*bp.StateRefresh, error) {
+				return map[bp.ResourceService]*bp.StateRefresh{
+					vpc.NewVpcService(s.Client): {
+						Target:     []string{"Available"},
+						Timeout:    resourceData.Timeout(schema.TimeoutCreate),
+						ResourceId: vpcId,
+					},
+				}, nil
 			},
 			CallError: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall, baseErr error) error {
 				//出现错误后重试
@@ -286,4 +354,14 @@ func importRouteEntry(d *schema.ResourceData, meta interface{}) ([]*schema.Resou
 
 func (s *VestackRouteEntryService) ReadResourceId(id string) string {
 	return id
+}
+
+func getUniversalInfo(actionName string) bp.UniversalInfo {
+	return bp.UniversalInfo{
+		ServiceName: "vpc",
+		Version:     "2020-04-01",
+		HttpMethod:  bp.GET,
+		ContentType: bp.Default,
+		Action:      actionName,
+	}
 }

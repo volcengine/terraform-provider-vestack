@@ -32,16 +32,15 @@ func (s *VestackEipAddressService) ReadResources(m map[string]interface{}) (data
 		ok      bool
 	)
 	return bp.WithPageNumberQuery(m, "PageSize", "PageNumber", 20, 1, func(condition map[string]interface{}) ([]interface{}, error) {
-		vpcClient := s.Client.VpcClient
 		action := "DescribeEipAddresses"
 		logger.Debug(logger.ReqFormat, action, condition)
 		if condition == nil {
-			resp, err = vpcClient.DescribeEipAddressesCommon(nil)
+			resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), nil)
 			if err != nil {
 				return data, err
 			}
 		} else {
-			resp, err = vpcClient.DescribeEipAddressesCommon(&condition)
+			resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), &condition)
 			if err != nil {
 				return data, err
 			}
@@ -166,7 +165,7 @@ func (s *VestackEipAddressService) CreateResource(resourceData *schema.ResourceD
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
-				return s.Client.VpcClient.AllocateEipAddressCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
 			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 				id, _ := bp.ObtainSdkValue("Result.AllocationId", *resp)
@@ -188,6 +187,10 @@ func (s *VestackEipAddressService) CreateResource(resourceData *schema.ResourceD
 				"tags": {
 					TargetField: "Tags",
 					ConvertType: bp.ConvertListN,
+				},
+				"security_protection_types": {
+					TargetField: "SecurityProtectionTypes",
+					ConvertType: bp.ConvertWithN,
 				},
 			},
 		},
@@ -212,7 +215,7 @@ func (s *VestackEipAddressService) ModifyResource(resourceData *schema.ResourceD
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
-				return s.Client.VpcClient.ModifyEipAddressAttributesCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
 			Refresh: &bp.StateRefresh{
 				Target:  []string{"Available", "Attached"},
@@ -296,7 +299,7 @@ func (s *VestackEipAddressService) RemoveResource(resourceData *schema.ResourceD
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
-				return s.Client.VpcClient.ReleaseEipAddressCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
 			CallError: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall, baseErr error) error {
 				//出现错误后重试
@@ -376,6 +379,7 @@ func getUniversalInfo(actionName string) bp.UniversalInfo {
 		ServiceName: "vpc",
 		Version:     "2020-04-01",
 		HttpMethod:  bp.GET,
+		ContentType: bp.Default,
 		Action:      actionName,
 	}
 }

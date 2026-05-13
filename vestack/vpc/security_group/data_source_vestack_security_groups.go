@@ -98,7 +98,7 @@ func DataSourceVestackSecurityGroups() *schema.Resource {
 						"type": {
 							Type:        schema.TypeString,
 							Computed:    true,
-							Description: "A Name Regex of SecurityGroup.",
+							Description: "The type of SecurityGroup.",
 						},
 						"project_name": {
 							Type:        schema.TypeString,

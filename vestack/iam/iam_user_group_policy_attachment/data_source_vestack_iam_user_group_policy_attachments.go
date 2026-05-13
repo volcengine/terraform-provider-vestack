@@ -1,0 +1,97 @@
+package iam_user_group_policy_attachment
+
+import (
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
+)
+
+func DataSourceVestackIamUserGroupPolicyAttachments() *schema.Resource {
+	return &schema.Resource{
+		Read: dataSourceVestackIamUserGroupPolicyAttachmentsRead,
+		Schema: map[string]*schema.Schema{
+			"user_group_name": {
+				Type:        schema.TypeString,
+				Required:    true,
+				Description: "A name of user group.",
+			},
+			"output_file": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Description: "File name where to save data source results.",
+			},
+			"total_count": {
+				Type:        schema.TypeInt,
+				Computed:    true,
+				Description: "The total count of query.",
+			},
+			"policies": {
+				Description: "The collection of query.",
+				Type:        schema.TypeList,
+				Computed:    true,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"policy_trn": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "Resource name of the strategy.",
+						},
+						"policy_name": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "Name of the policy.",
+						},
+						"policy_type": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "The type of the policy.",
+						},
+						"attach_date": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "Attached time.",
+						},
+						"description": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "The description.",
+						},
+						"policy_scope": {
+							Type:        schema.TypeList,
+							Computed:    true,
+							Description: "The scope of the policy.",
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"policy_scope_type": {
+										Type:        schema.TypeString,
+										Computed:    true,
+										Description: "The type of the policy scope.",
+									},
+									"project_name": {
+										Type:        schema.TypeString,
+										Computed:    true,
+										Description: "The name of the project.",
+									},
+									"project_display_name": {
+										Type:        schema.TypeString,
+										Computed:    true,
+										Description: "The display name of the project.",
+									},
+									"attach_date": {
+										Type:        schema.TypeString,
+										Computed:    true,
+										Description: "The attach date of the policy scope.",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func dataSourceVestackIamUserGroupPolicyAttachmentsRead(d *schema.ResourceData, meta interface{}) error {
+	service := NewIamUserGroupPolicyAttachmentService(meta.(*bp.SdkClient))
+	return service.Dispatcher.Data(service, d, DataSourceVestackIamUserGroupPolicyAttachments())
+}

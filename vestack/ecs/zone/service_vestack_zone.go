@@ -32,13 +32,12 @@ func (s *VestackZoneService) ReadResources(condition map[string]interface{}) ([]
 		err     error
 		data    []interface{}
 	)
-	ecs := s.Client.EcsClient
 	action := "DescribeZones"
 	logger.Debug(logger.ReqFormat, action, condition)
 	if condition == nil {
-		resp, err = ecs.DescribeZonesCommon(nil)
+		resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), nil)
 	} else {
-		resp, err = ecs.DescribeZonesCommon(&condition)
+		resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), &condition)
 	}
 	if err != nil {
 		return nil, err
@@ -118,4 +117,13 @@ func (s *VestackZoneService) DatasourceResources(data *schema.ResourceData, reso
 
 func (s *VestackZoneService) ReadResourceId(id string) string {
 	return id
+}
+
+func getUniversalInfo(actionName string) bp.UniversalInfo {
+	return bp.UniversalInfo{
+		ServiceName: "ecs",
+		Version:     "2020-04-01",
+		HttpMethod:  bp.GET,
+		Action:      actionName,
+	}
 }

@@ -1,3 +1,7 @@
 resource "vestack_iam_service_linked_role" "foo" {
-  service_name = "transitrouter"
+  service_name = "vpc"
+  tags {
+    key   = "key-2"
+    value = "value-2"
+  }
 }

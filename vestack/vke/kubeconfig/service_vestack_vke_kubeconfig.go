@@ -196,6 +196,14 @@ func (s *VestackVkeKubeconfigService) DatasourceResources(*schema.ResourceData, 
 				TargetField: "Filter.ClusterIds",
 				ConvertType: bp.ConvertJsonArray,
 			},
+			"role_ids": {
+				TargetField: "Filter.RoleIds",
+				ConvertType: bp.ConvertJsonArray,
+			},
+			"user_ids": {
+				TargetField: "Filter.UserIds",
+				ConvertType: bp.ConvertJsonArray,
+			},
 			"types": {
 				TargetField: "Filter.Types",
 				ConvertType: bp.ConvertJsonArray,

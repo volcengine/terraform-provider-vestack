@@ -2,6 +2,7 @@ package common
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
@@ -62,8 +63,48 @@ func (p *Project) ModifyProject(trn *ProjectTrn, resourceData *schema.ResourceDa
 					if err != nil {
 						return false, err
 					}
-					trnStr := fmt.Sprintf("trn:%s:%s:%d:%s/%s", trn.ServiceName, p.Client.Region, int(accountId.(float64)),
-						trn.ResourceType, id)
+
+					var trnStr string
+					if trn.ServiceName == "tos" && trn.ResourceType == "bucket" {
+						// tos bucket 特殊处理
+						trnStr = fmt.Sprintf("trn:%s:%s:%d:%s", trn.ServiceName, p.Client.Region, int(accountId.(float64)), id)
+					} else if trn.ServiceName == "transitrouter" && trn.ResourceType == "transitrouterbandwidthpackage" {
+						// transit router bandwidth package 特殊处理
+						trnStr = fmt.Sprintf("trn:%s:%s:%d:%s/%s", trn.ServiceName, "", int(accountId.(float64)),
+							trn.ResourceType, id)
+					} else if trn.ServiceName == "kms" && trn.ResourceType == "keyrings" {
+						keyringName := d.Get("keyring_name").(string)
+						trnStr = fmt.Sprintf("trn:%s:%s:%d:%s/%s", trn.ServiceName, p.Client.Region, int(accountId.(float64)),
+							trn.ResourceType, keyringName)
+					} else if trn.ServiceName == "dns" && trn.ResourceType == "zone" {
+						// dns zone 特殊处理
+						trnStr = fmt.Sprintf("trn:%s:%s:%d:%s/%s", trn.ServiceName, "", int(accountId.(float64)),
+							trn.ResourceType, id)
+					} else if trn.ServiceName == "private_zone" {
+						// private_zone 特殊处理
+						if trn.ResourceType == "endpoint" {
+							trnStr = fmt.Sprintf("trn:%s:%s:%d:%s/ep-%s", trn.ServiceName, "", int(accountId.(float64)),
+								trn.ResourceType, id)
+						} else if trn.ResourceType == "rule" {
+							trnStr = fmt.Sprintf("trn:%s:%s:%d:%s/rule-%s", trn.ServiceName, "", int(accountId.(float64)),
+								trn.ResourceType, id)
+						} else {
+							trnStr = fmt.Sprintf("trn:%s:%s:%d:%s/%s", trn.ServiceName, "", int(accountId.(float64)),
+								trn.ResourceType, id)
+						}
+					} else if trn.ServiceName == "cr" && trn.ResourceType == "repository" {
+						// cr namespace 特殊处理
+						ids := strings.Split(id, ":")
+						if len(ids) != 2 {
+							return false, fmt.Errorf("invalid cr namespace id:%s", id)
+						}
+						newId := strings.Join(ids, "/")
+						trnStr = fmt.Sprintf("trn:%s:%s:%d:%s/%s", trn.ServiceName, p.Client.Region, int(accountId.(float64)),
+							trn.ResourceType, newId)
+					} else {
+						trnStr = fmt.Sprintf("trn:%s:%s:%d:%s/%s", trn.ServiceName, p.Client.Region, int(accountId.(float64)),
+							trn.ResourceType, id)
+					}
 					(*call.SdkParam)["ResourceTrn.1"] = trnStr
 					return true, nil
 				},
@@ -95,6 +136,7 @@ func (p *Project) ModifyProject(trn *ProjectTrn, resourceData *schema.ResourceDa
 							if err != nil {
 								return nil, "", err
 							}
+							logger.Debug(logger.ReqFormat, "project data is", d, name)
 
 							return d, name.(string), err
 						},
@@ -157,8 +199,10 @@ func (p *Project) ModifyProjectOld(trn ProjectTrn, resourceData *schema.Resource
 func (p *Project) getUniversalInfo(actionName string) UniversalInfo {
 	return UniversalInfo{
 		ServiceName: "iam",
+		Action:      actionName,
 		Version:     "2021-08-01",
 		HttpMethod:  GET,
-		Action:      actionName,
+		ContentType: Default,
+		RegionType:  Global,
 	}
 }

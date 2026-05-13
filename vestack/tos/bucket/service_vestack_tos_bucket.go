@@ -1,7 +1,11 @@
 package bucket
 
 import (
+	"crypto/md5"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -57,6 +61,7 @@ func (s *VestackTosBucketService) ReadResource(resourceData *schema.ResourceData
 		header  http.Header
 		acl     map[string]interface{}
 		version map[string]interface{}
+		tags    map[string]interface{}
 		buckets []interface{}
 	)
 
@@ -107,6 +112,9 @@ func (s *VestackTosBucketService) ReadResource(resourceData *schema.ResourceData
 		if header.Get("X-Tos-Storage-Class") != "" {
 			data["StorageClass"] = header.Get("X-Tos-Storage-Class")
 		}
+		if header.Get("X-Tos-Az-Redundancy") != "" {
+			data["AzRedundancy"] = header.Get("X-Tos-Az-Redundancy")
+		}
 	}
 
 	action = "GetBucketAcl"
@@ -124,22 +132,47 @@ func (s *VestackTosBucketService) ReadResource(resourceData *schema.ResourceData
 	if acl, ok = (*resp)[bp.BypassResponse].(map[string]interface{}); ok {
 		data["PublicAcl"] = acl
 		data["AccountAcl"] = acl
+		data["BucketAclDelivered"] = acl["BucketAclDelivered"]
 	}
 
-	action = "GetBucketVersioning"
+	bucketType := resourceData.Get("bucket_type").(string)
+	if bucketType == "" || bucketType == "fns" {
+		action = "GetBucketVersioning"
+		req = map[string]interface{}{
+			"versioning": "",
+		}
+		logger.Debug(logger.ReqFormat, action, req)
+		resp, err = tos.DoBypassSvcCall(bp.BypassSvcInfo{
+			HttpMethod: bp.GET,
+			Domain:     instanceId,
+		}, &req)
+		if err != nil {
+			return data, err
+		}
+		if version, ok = (*resp)[bp.BypassResponse].(map[string]interface{}); ok {
+			data["EnableVersion"] = version
+		}
+	}
+
+	action = "GetBucketTagging"
 	req = map[string]interface{}{
-		"versioning": "",
+		"tagging": "",
 	}
 	logger.Debug(logger.ReqFormat, action, req)
 	resp, err = tos.DoBypassSvcCall(bp.BypassSvcInfo{
 		HttpMethod: bp.GET,
 		Domain:     instanceId,
+		//Path:       []string{"?tagging="},
 	}, &req)
-	if err != nil {
+	if err != nil && !bp.ResourceNotFoundError(err) {
 		return data, err
 	}
-	if version, ok = (*resp)[bp.BypassResponse].(map[string]interface{}); ok {
-		data["EnableVersion"] = version
+	if tags, ok = (*resp)[bp.BypassResponse].(map[string]interface{}); ok {
+		if tagSet, exist := tags["TagSet"]; exist {
+			if tagMap, ok := tagSet.(map[string]interface{}); ok {
+				data["Tags"] = tagMap["Tags"]
+			}
+		}
 	}
 
 	if len(data) == 0 {
@@ -195,6 +228,8 @@ func (s *VestackTosBucketService) WithResourceResponseHandlers(m map[string]inte
 }
 
 func (s *VestackTosBucketService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
+	var callbacks []bp.Callback
+
 	//create bucket
 	callback := bp.Callback{
 		Call: bp.SdkCall{
@@ -223,6 +258,27 @@ func (s *VestackTosBucketService) CreateResource(resourceData *schema.ResourceDa
 						Type: bp.HeaderParam,
 					},
 				},
+				"az_redundancy": {
+					ConvertType: bp.ConvertDefault,
+					TargetField: "x-tos-az-redundancy",
+					SpecialParam: &bp.SpecialParam{
+						Type: bp.HeaderParam,
+					},
+				},
+				"project_name": {
+					ConvertType: bp.ConvertDefault,
+					TargetField: "x-tos-project-name",
+					SpecialParam: &bp.SpecialParam{
+						Type: bp.HeaderParam,
+					},
+				},
+				"bucket_type": {
+					ConvertType: bp.ConvertDefault,
+					TargetField: "x-tos-bucket-type",
+					SpecialParam: &bp.SpecialParam{
+						Type: bp.HeaderParam,
+					},
+				},
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
@@ -239,6 +295,8 @@ func (s *VestackTosBucketService) CreateResource(resourceData *schema.ResourceDa
 			},
 		},
 	}
+	callbacks = append(callbacks, callback)
+
 	//version
 	callbackVersion := bp.Callback{
 		Call: bp.SdkCall{
@@ -265,10 +323,20 @@ func (s *VestackTosBucketService) CreateResource(resourceData *schema.ResourceDa
 					},
 					ForceGet: true,
 				},
+				"bucket_type": {
+					ConvertType: bp.ConvertDefault,
+					TargetField: "x-tos-bucket-type",
+					SpecialParam: &bp.SpecialParam{
+						Type: bp.HeaderParam,
+					},
+				},
 			},
 			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 				//if disable version,skip this call
 				if (*call.SdkParam)[bp.BypassParam].(map[string]interface{})["Status"] == "" {
+					return false, nil
+				}
+				if (*call.SdkParam)[bp.BypassHeader].(map[string]string)["x-tos-bucket-type"] == "hns" {
 					return false, nil
 				}
 				return true, nil
@@ -276,58 +344,17 @@ func (s *VestackTosBucketService) CreateResource(resourceData *schema.ResourceDa
 			ExecuteCall: s.executePutBucketVersioning(),
 		},
 	}
-	//acl
-	callbackAcl := bp.Callback{
-		Call: bp.SdkCall{
-			ServiceCategory: bp.ServiceBypass,
-			Action:          "PutBucketAcl",
-			ConvertMode:     bp.RequestConvertInConvert,
-			Convert: map[string]bp.RequestConvert{
-				"bucket_name": {
-					ConvertType: bp.ConvertDefault,
-					TargetField: "BucketName",
-					SpecialParam: &bp.SpecialParam{
-						Type: bp.DomainParam,
-					},
-				},
-				"account_acl": {
-					ConvertType: bp.ConvertListN,
-					TargetField: "Grants",
-					NextLevelConvert: map[string]bp.RequestConvert{
-						"account_id": {
-							ConvertType: bp.ConvertDefault,
-							TargetField: "Grantee.ID",
-						},
-						"acl_type": {
-							ConvertType: bp.ConvertDefault,
-							TargetField: "Grantee.Type",
-						},
-						"permission": {
-							ConvertType: bp.ConvertDefault,
-							TargetField: "Permission",
-						},
-					},
-				},
-			},
-			BeforeCall:  s.beforePutBucketAcl(),
-			ExecuteCall: s.executePutBucketAcl(),
-			//Refresh: &bp.StateRefresh{
-			//	Target:  []string{"Success"},
-			//	Timeout: resourceData.Timeout(schema.TimeoutCreate),
-			//},
-		},
-	}
-	return []bp.Callback{callback, callbackVersion, callbackAcl}
-}
+	callbacks = append(callbacks, callbackVersion)
 
-func (s *VestackTosBucketService) ModifyResource(data *schema.ResourceData, resource *schema.Resource) []bp.Callback {
-	var callbacks []bp.Callback
-	if data.HasChange("enable_version") {
-		//version
-		callbackVersion := bp.Callback{
+	//acl
+	publicAcl := resourceData.Get("public_acl")
+	_, ok1 := resourceData.GetOk("account_acl")
+	_, ok2 := resourceData.GetOk("bucket_acl_delivered")
+	if publicAcl.(string) != "private" || ok1 || ok2 {
+		callbackAcl := bp.Callback{
 			Call: bp.SdkCall{
 				ServiceCategory: bp.ServiceBypass,
-				Action:          "PutBucketVersioning",
+				Action:          "PutBucketAcl",
 				ConvertMode:     bp.RequestConvertInConvert,
 				Convert: map[string]bp.RequestConvert{
 					"bucket_name": {
@@ -336,29 +363,143 @@ func (s *VestackTosBucketService) ModifyResource(data *schema.ResourceData, reso
 						SpecialParam: &bp.SpecialParam{
 							Type: bp.DomainParam,
 						},
-						ForceGet: true,
 					},
-					"enable_version": {
-						ConvertType: bp.ConvertDefault,
-						TargetField: "Status",
-						Convert: func(data *schema.ResourceData, i interface{}) interface{} {
-							if i.(bool) {
-								return "Enabled"
-							} else {
-								return "Suspended"
-							}
+					"account_acl": {
+						ConvertType: bp.ConvertListN,
+						TargetField: "Grants",
+						NextLevelConvert: map[string]bp.RequestConvert{
+							"account_id": {
+								ConvertType: bp.ConvertDefault,
+								TargetField: "Grantee.ID",
+							},
+							"acl_type": {
+								ConvertType: bp.ConvertDefault,
+								TargetField: "Grantee.Type",
+							},
+							"permission": {
+								ConvertType: bp.ConvertDefault,
+								TargetField: "Permission",
+							},
 						},
-						ForceGet: true,
+					},
+					"bucket_acl_delivered": {
+						ConvertType: bp.ConvertDefault,
+						TargetField: "BucketAclDelivered",
 					},
 				},
-				ExecuteCall: s.executePutBucketVersioning(),
+				BeforeCall:  s.beforePutBucketAcl(),
+				ExecuteCall: s.executePutBucketAcl(),
+				//Refresh: &bp.StateRefresh{
+				//	Target:  []string{"Success"},
+				//	Timeout: resourceData.Timeout(schema.TimeoutCreate),
+				//},
 			},
 		}
-		callbacks = append(callbacks, callbackVersion)
+		callbacks = append(callbacks, callbackAcl)
+	}
+
+	//tags
+	if _, ok := resourceData.GetOk("tags"); ok {
+		callbackTags := bp.Callback{
+			Call: bp.SdkCall{
+				ServiceCategory: bp.ServiceBypass,
+				Action:          "PutBucketTagging",
+				ConvertMode:     bp.RequestConvertInConvert,
+				ContentType:     bp.ContentTypeJson,
+				Convert: map[string]bp.RequestConvert{
+					"bucket_name": {
+						ConvertType: bp.ConvertDefault,
+						TargetField: "BucketName",
+						ForceGet:    true,
+						SpecialParam: &bp.SpecialParam{
+							Type: bp.DomainParam,
+						},
+					},
+				},
+				BeforeCall:  s.beforePutBucketTagging(),
+				ExecuteCall: s.executePutBucketTagging(),
+			},
+		}
+		callbacks = append(callbacks, callbackTags)
+	}
+
+	//storage class
+	if _, ok := resourceData.GetOk("storage_class"); ok {
+		callbackStorageClass := bp.Callback{
+			Call: bp.SdkCall{
+				ServiceCategory: bp.ServiceBypass,
+				Action:          "PutBucketStorageClass",
+				ConvertMode:     bp.RequestConvertInConvert,
+				ContentType:     bp.ContentTypeJson,
+				Convert: map[string]bp.RequestConvert{
+					"bucket_name": {
+						ConvertType: bp.ConvertDefault,
+						TargetField: "BucketName",
+						ForceGet:    true,
+						SpecialParam: &bp.SpecialParam{
+							Type: bp.DomainParam,
+						},
+					},
+					"storage_class": {
+						ConvertType: bp.ConvertDefault,
+						TargetField: "x-tos-storage-class",
+						SpecialParam: &bp.SpecialParam{
+							Type: bp.HeaderParam,
+						},
+					},
+				},
+				ExecuteCall: s.executePutBucketStorageClass(),
+			},
+		}
+		callbacks = append(callbacks, callbackStorageClass)
+	}
+
+	return callbacks
+}
+
+func (s *VestackTosBucketService) ModifyResource(data *schema.ResourceData, resource *schema.Resource) []bp.Callback {
+	var callbacks []bp.Callback
+	bucketType := data.Get("bucket_type").(string)
+	if bucketType == "" || bucketType == "fns" {
+		if data.HasChange("enable_version") {
+			//version
+			callbackVersion := bp.Callback{
+				Call: bp.SdkCall{
+					ServiceCategory: bp.ServiceBypass,
+					Action:          "PutBucketVersioning",
+					ConvertMode:     bp.RequestConvertInConvert,
+					Convert: map[string]bp.RequestConvert{
+						"bucket_name": {
+							ConvertType: bp.ConvertDefault,
+							TargetField: "BucketName",
+							SpecialParam: &bp.SpecialParam{
+								Type: bp.DomainParam,
+							},
+							ForceGet: true,
+						},
+						"enable_version": {
+							ConvertType: bp.ConvertDefault,
+							TargetField: "Status",
+							Convert: func(data *schema.ResourceData, i interface{}) interface{} {
+								if i.(bool) {
+									return "Enabled"
+								} else {
+									return "Suspended"
+								}
+							},
+							ForceGet: true,
+						},
+					},
+					ExecuteCall: s.executePutBucketVersioning(),
+				},
+			}
+			callbacks = append(callbacks, callbackVersion)
+		}
 	}
 	var grant = []string{
 		"public_acl",
 		"account_acl",
+		"bucket_acl_delivered",
 	}
 	for _, v := range grant {
 		if data.HasChange(v) {
@@ -398,6 +539,11 @@ func (s *VestackTosBucketService) ModifyResource(data *schema.ResourceData, reso
 							},
 							ForceGet: true,
 						},
+						"bucket_acl_delivered": {
+							ConvertType: bp.ConvertDefault,
+							TargetField: "BucketAclDelivered",
+							ForceGet:    true,
+						},
 					},
 					BeforeCall:  s.beforePutBucketAcl(),
 					ExecuteCall: s.executePutBucketAcl(),
@@ -410,6 +556,97 @@ func (s *VestackTosBucketService) ModifyResource(data *schema.ResourceData, reso
 			callbacks = append(callbacks, callbackAcl)
 			break
 		}
+	}
+
+	if data.HasChange("tags") {
+		callbacks = s.setResourceTags(data, callbacks)
+	}
+
+	if data.HasChange("storage_class") {
+		callbackStorageClass := bp.Callback{
+			Call: bp.SdkCall{
+				ServiceCategory: bp.ServiceBypass,
+				Action:          "PutBucketStorageClass",
+				ConvertMode:     bp.RequestConvertInConvert,
+				ContentType:     bp.ContentTypeJson,
+				Convert: map[string]bp.RequestConvert{
+					"bucket_name": {
+						ConvertType: bp.ConvertDefault,
+						TargetField: "BucketName",
+						ForceGet:    true,
+						SpecialParam: &bp.SpecialParam{
+							Type: bp.DomainParam,
+						},
+					},
+					"storage_class": {
+						ConvertType: bp.ConvertDefault,
+						TargetField: "x-tos-storage-class",
+						SpecialParam: &bp.SpecialParam{
+							Type: bp.HeaderParam,
+						},
+					},
+				},
+				ExecuteCall: s.executePutBucketStorageClass(),
+			},
+		}
+		callbacks = append(callbacks, callbackStorageClass)
+	}
+
+	return callbacks
+}
+
+func (s *VestackTosBucketService) setResourceTags(resourceData *schema.ResourceData, callbacks []bp.Callback) []bp.Callback {
+	if _, ok := resourceData.GetOk("tags"); ok {
+		addCallback := bp.Callback{
+			Call: bp.SdkCall{
+				ServiceCategory: bp.ServiceBypass,
+				Action:          "PutBucketTagging",
+				ConvertMode:     bp.RequestConvertInConvert,
+				Convert: map[string]bp.RequestConvert{
+					"bucket_name": {
+						ConvertType: bp.ConvertDefault,
+						TargetField: "BucketName",
+						ForceGet:    true,
+						SpecialParam: &bp.SpecialParam{
+							Type: bp.DomainParam,
+						},
+					},
+				},
+				BeforeCall:  s.beforePutBucketTagging(),
+				ExecuteCall: s.executePutBucketTagging(),
+			},
+		}
+		callbacks = append(callbacks, addCallback)
+	} else {
+		removeCallback := bp.Callback{
+			Call: bp.SdkCall{
+				ServiceCategory: bp.ServiceBypass,
+				Action:          "DeleteBucketTagging",
+				ConvertMode:     bp.RequestConvertInConvert,
+				Convert: map[string]bp.RequestConvert{
+					"bucket_name": {
+						ConvertType: bp.ConvertDefault,
+						TargetField: "BucketName",
+						ForceGet:    true,
+						SpecialParam: &bp.SpecialParam{
+							Type: bp.DomainParam,
+						},
+					},
+				},
+				ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+					logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
+					return s.Client.BypassSvcClient.DoBypassSvcCall(bp.BypassSvcInfo{
+						HttpMethod: bp.DELETE,
+						Domain:     (*call.SdkParam)[bp.BypassDomain].(string),
+						Path:       []string{"?tagging="},
+						UrlParam: map[string]string{
+							"tagging": "",
+						},
+					}, nil)
+				},
+			},
+		}
+		callbacks = append(callbacks, removeCallback)
 	}
 
 	return callbacks
@@ -539,5 +776,85 @@ func (s *VestackTosBucketService) executePutBucketVersioning() bp.ExecuteCallFun
 				"versioning": "",
 			},
 		}, &condition)
+	}
+}
+
+func (s *VestackTosBucketService) executePutBucketStorageClass() bp.ExecuteCallFunc {
+	return func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+		logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
+		//PutStorageClass
+		condition := (*call.SdkParam)[bp.BypassParam].(map[string]interface{})
+		return s.Client.BypassSvcClient.DoBypassSvcCall(bp.BypassSvcInfo{
+			ContentType: bp.ApplicationJSON,
+			HttpMethod:  bp.PUT,
+			Header:      (*call.SdkParam)[bp.BypassHeader].(map[string]string),
+			Domain:      (*call.SdkParam)[bp.BypassDomain].(string),
+			UrlParam: map[string]string{
+				"storageClass": "",
+			},
+		}, &condition)
+	}
+}
+
+func (s *VestackTosBucketService) beforePutBucketTagging() bp.BeforeCallFunc {
+	return func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+		var tagsArr []interface{}
+		tags := d.Get("tags")
+		tagSet, ok := tags.(*schema.Set)
+		if !ok {
+			return false, fmt.Errorf("tags is not set")
+		}
+		for _, v := range tagSet.List() {
+			tagMap, ok := v.(map[string]interface{})
+			if !ok {
+				return false, fmt.Errorf("tags value is not set")
+			}
+			tagsArr = append(tagsArr, map[string]interface{}{
+				"Key":   tagMap["key"],
+				"Value": tagMap["value"],
+			})
+		}
+		tagsParam := make(map[string]interface{})
+		tagsParam["Tags"] = tagsArr
+
+		(*call.SdkParam)[bp.BypassParam].(map[string]interface{})["TagSet"] = tagsParam
+
+		bytes, err := json.Marshal((*call.SdkParam)[bp.BypassParam].(map[string]interface{}))
+		if err != nil {
+			return false, err
+		}
+		hash := md5.New()
+		io.WriteString(hash, string(bytes))
+		contentMd5 := base64.StdEncoding.EncodeToString(hash.Sum(nil))
+
+		(*call.SdkParam)[bp.BypassHeader].(map[string]string)["Content-MD5"] = contentMd5
+		return true, nil
+	}
+}
+
+func (s *VestackTosBucketService) executePutBucketTagging() bp.ExecuteCallFunc {
+	return func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+		logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
+		//PutBucketTagging
+		condition := (*call.SdkParam)[bp.BypassParam].(map[string]interface{})
+		return s.Client.BypassSvcClient.DoBypassSvcCall(bp.BypassSvcInfo{
+			ContentType: bp.ApplicationJSON,
+			HttpMethod:  bp.PUT,
+			Domain:      (*call.SdkParam)[bp.BypassDomain].(string),
+			Header:      (*call.SdkParam)[bp.BypassHeader].(map[string]string),
+			//Path:        []string{"?tagging="},
+			UrlParam: map[string]string{
+				"tagging": "",
+			},
+		}, &condition)
+	}
+}
+
+func (s *VestackTosBucketService) ProjectTrn() *bp.ProjectTrn {
+	return &bp.ProjectTrn{
+		ServiceName:          "tos",
+		ResourceType:         "bucket",
+		ProjectResponseField: "ProjectName",
+		ProjectSchemaField:   "project_name",
 	}
 }

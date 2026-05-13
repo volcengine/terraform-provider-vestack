@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/volcengine/volcengine-go-sdk/volcengine"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -15,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/volcengine/volcengine-go-sdk/volcengine"
 	"github.com/volcengine/volcengine-go-sdk/volcengine/client"
 	"github.com/volcengine/volcengine-go-sdk/volcengine/client/metadata"
 	"github.com/volcengine/volcengine-go-sdk/volcengine/corehandlers"
@@ -29,28 +29,27 @@ func (u *BypassSvc) NewTosClient(info *BypassSvcInfo) *client.Client {
 	svc := "tos"
 	config := u.Session.ClientConfig(svc)
 	var (
-		endpoint string
+		endpoint       string
+		endpointSuffix string
 	)
-	format := fmt.Sprintf("tos-%s.volces.com", config.SigningRegion)
-
-	if len(u.endpoints) > 0 {
-		if end, ok := u.endpoints[svc]; ok {
-			format = end
+	endpointSuffix = VestackBypassEndpointSuffix
+	if len(u.endpointSuffix) > 0 {
+		if suffix, ok := u.endpointSuffix[svc]; ok {
+			endpointSuffix = suffix
 		}
 	}
+
 	if info.Domain == "" {
-		format = "%s://" + format
 		if config.Config.DisableSSL != nil && *config.Config.DisableSSL {
-			endpoint = fmt.Sprintf(format, "http")
+			endpoint = fmt.Sprintf("%s://tos-%s.%s", "http", config.SigningRegion, endpointSuffix)
 		} else {
-			endpoint = fmt.Sprintf(format, "https")
+			endpoint = fmt.Sprintf("%s://tos-%s.%s", "https", config.SigningRegion, endpointSuffix)
 		}
 	} else {
-		format = "%s://%s." + format
 		if config.Config.DisableSSL != nil && *config.Config.DisableSSL {
-			endpoint = fmt.Sprintf(format, "http", info.Domain)
+			endpoint = fmt.Sprintf("%s://%s.tos-%s.%s", "http", info.Domain, config.SigningRegion, endpointSuffix)
 		} else {
-			endpoint = fmt.Sprintf(format, "https", info.Domain)
+			endpoint = fmt.Sprintf("%s://%s.tos-%s.%s", "https", info.Domain, config.SigningRegion, endpointSuffix)
 		}
 
 	}
@@ -351,7 +350,7 @@ func tosUnmarshalError(r *request.Request) {
 	if r.DataFilled() {
 		body, err := ioutil.ReadAll(r.HTTPResponse.Body)
 		if err != nil {
-			fmt.Printf("read volcenginebody err, %v\n", err)
+			fmt.Printf("read vestackbody err, %v\n", err)
 			r.Error = err
 			return
 		}

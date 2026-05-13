@@ -1,11 +1,34 @@
+data "vestack_zones" "foo" {
+}
+
+resource "vestack_vpc" "foo" {
+  vpc_name   = "acc-test-vpc"
+  cidr_block = "172.16.0.0/16"
+}
+
+resource "vestack_subnet" "foo" {
+  subnet_name = "acc-test-subnet"
+  cidr_block  = "172.16.0.0/24"
+  zone_id     = data.vestack_zones.foo.zones[0].id
+  vpc_id      = vestack_vpc.foo.id
+}
+
+resource "vestack_security_group" "foo" {
+  security_group_name = "acc-test-sg"
+  vpc_id              = vestack_vpc.foo.id
+}
+
 resource "vestack_network_interface" "foo" {
-  subnet_id              = "subnet-2fe79j7c8o5c059gp68ksxr93"
-  security_group_ids     = ["sg-2fepz3c793g1s59gp67y21r34"]
-  primary_ip_address     = "192.168.5.253"
-  network_interface_name = "tf-test-up"
-  description            = "tf-test-up"
+  network_interface_name = "acc-test-eni"
+  description            = "acc-test"
+  subnet_id              = vestack_subnet.foo.id
+  security_group_ids     = [vestack_security_group.foo.id]
+  primary_ip_address     = "172.16.0.253"
   port_security_enabled  = false
+  private_ip_address     = ["172.16.0.2"]
   project_name           = "default"
-  private_ip_address     = ["192.168.5.2"]
-  //secondary_private_ip_address_count = 0
+  tags {
+    key   = "k1"
+    value = "v1"
+  }
 }

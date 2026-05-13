@@ -19,6 +19,15 @@ func DataSourceVestackVkeKubeconfigs() *schema.Resource {
 				Set:         schema.HashString,
 				Description: "A list of Kubeconfig IDs.",
 			},
+			"user_ids": {
+				Type:     schema.TypeSet,
+				Optional: true,
+				Elem: &schema.Schema{
+					Type: schema.TypeInt,
+				},
+				Set:         schema.HashInt,
+				Description: "A list of User IDs.",
+			},
 			"name_regex": {
 				Type:         schema.TypeString,
 				Optional:     true,
@@ -56,6 +65,15 @@ func DataSourceVestackVkeKubeconfigs() *schema.Resource {
 				},
 				Set:         schema.HashString,
 				Description: "A list of Cluster IDs.",
+			},
+			"role_ids": {
+				Type:     schema.TypeSet,
+				Optional: true,
+				Elem: &schema.Schema{
+					Type: schema.TypeInt,
+				},
+				Set:         schema.HashInt,
+				Description: "A list of Role IDs.",
 			},
 			"types": {
 				Type:     schema.TypeSet,

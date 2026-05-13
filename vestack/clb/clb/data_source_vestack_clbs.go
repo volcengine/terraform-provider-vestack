@@ -3,7 +3,7 @@ package clb
 import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 func DataSourceVestackClbs() *schema.Resource {
@@ -30,7 +30,53 @@ func DataSourceVestackClbs() *schema.Resource {
 				Optional:    true,
 				Description: "The ProjectName of Clb.",
 			},
-			"tags": ve.TagsSchema(),
+			// 开白参数，API文档已显示支持，API explore暂未支持
+			// "exclusive_cluster_id": {
+			// 	Type:        schema.TypeString,
+			// 	Optional:    true,
+			// 	Description: "The ID of the exclusive cluster.",
+			// },
+			"instance_ids": {
+				Type:     schema.TypeSet,
+				Optional: true,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
+				Set:         schema.HashString,
+				Description: "The IDs of the backend server of the CLB.",
+			},
+			"instance_ips": {
+				Type:     schema.TypeSet,
+				Optional: true,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
+				Set:         schema.HashString,
+				Description: "The IP address of the backend server of the CLB.",
+			},
+			"master_zone_id": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Description: "The master zone ID of the CLB.",
+			},
+			"address_ip_version": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				ValidateFunc: validation.StringInSlice([]string{"ipv4", "DualStack"}, false),
+				Description:  "The address IP version of the CLB.",
+			},
+			"status": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Description: "The status of the CLB.",
+			},
+			"type": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				ValidateFunc: validation.StringInSlice([]string{"public", "private"}, false),
+				Description:  "The network type of the CLB.",
+			},
+			"tags": bp.TagsSchema(),
 
 			"output_file": {
 				Type:        schema.TypeString,
@@ -52,6 +98,11 @@ func DataSourceVestackClbs() *schema.Resource {
 				Type:        schema.TypeString,
 				Optional:    true,
 				Description: "The private ip address of the Clb.",
+			},
+			"eip_address": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Description: "The public ip address of the Clb.",
 			},
 			"load_balancer_name": {
 				Type:        schema.TypeString,
@@ -124,6 +175,11 @@ func DataSourceVestackClbs() *schema.Resource {
 							Computed:    true,
 							Description: "The modification protection reason of the Clb.",
 						},
+						"service_managed": {
+							Type:        schema.TypeBool,
+							Computed:    true,
+							Description: "Whether the CLB instance is a managed resource.",
+						},
 						"address_ip_version": {
 							Type:        schema.TypeString,
 							Computed:    true,
@@ -184,7 +240,7 @@ func DataSourceVestackClbs() *schema.Resource {
 							Computed:    true,
 							Description: "The ProjectName of the Clb.",
 						},
-						"tags": ve.TagsSchemaComputed(),
+						"tags": bp.TagsSchemaComputed(),
 						"master_zone_id": {
 							Type:        schema.TypeString,
 							Computed:    true,
@@ -194,6 +250,12 @@ func DataSourceVestackClbs() *schema.Resource {
 							Type:        schema.TypeString,
 							Computed:    true,
 							Description: "The slave zone ID of the CLB.",
+						},
+						// 计费信息
+						"billing_type": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "The billing type of the CLB instance.",
 						},
 						"renew_type": {
 							Type:        schema.TypeString,
@@ -240,6 +302,17 @@ func DataSourceVestackClbs() *schema.Resource {
 							Computed:    true,
 							Description: "The expected recycle time of the Clb.",
 						},
+						// 查询CLB实例详情的API返回
+						"log_topic_id": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "The log topic ID of the Clb.",
+						},
+						"enabled": {
+							Type:        schema.TypeBool,
+							Computed:    true,
+							Description: "Whether the CLB instance is enabled.",
+						},
 						"eip_billing_config": {
 							Type:        schema.TypeList,
 							Computed:    true,
@@ -260,6 +333,24 @@ func DataSourceVestackClbs() *schema.Resource {
 										Type:        schema.TypeInt,
 										Computed:    true,
 										Description: "The peek bandwidth of the EIP assigned to CLB. Units: Mbps.",
+									},
+									"eip_address": {
+										Type:        schema.TypeString,
+										Computed:    true,
+										Description: "The public IP address of the CLB instance.",
+									},
+									"bandwidth_package_id": {
+										Type:        schema.TypeString,
+										Computed:    true,
+										Description: "The bandwidth package id of the EIP assigned to CLB.",
+									},
+									"security_protection_types": {
+										Type:        schema.TypeList,
+										Computed:    true,
+										Description: "The security protection types of the EIP assigned to CLB.",
+										Elem: &schema.Schema{
+											Type: schema.TypeString,
+										},
 									},
 								},
 							},
@@ -298,6 +389,124 @@ func DataSourceVestackClbs() *schema.Resource {
 								},
 							},
 						},
+						// 查询CLB实例详情的API返回
+						"listeners": {
+							Type:        schema.TypeList,
+							Computed:    true,
+							Description: "The information of the listeners in the CLB instance.",
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"listener_id": {
+										Type:        schema.TypeString,
+										Computed:    true,
+										Description: "The ID of the Listener.",
+									},
+									"listener_name": {
+										Type:        schema.TypeString,
+										Computed:    true,
+										Description: "The name of the Listener.",
+									},
+								},
+							},
+						},
+						"server_groups": {
+							Type:        schema.TypeList,
+							Computed:    true,
+							Description: "The information of the server groups in the CLB instance.",
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"server_group_id": {
+										Type:        schema.TypeString,
+										Computed:    true,
+										Description: "The ID of the server group.",
+									},
+									"server_group_name": {
+										Type:        schema.TypeString,
+										Computed:    true,
+										Description: "The name of the server group.",
+									},
+								},
+							},
+						},
+						"access_log": {
+							Type:        schema.TypeList,
+							Computed:    true,
+							Description: "The access log configuration of the CLB instance.",
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"enabled": {
+										Type:        schema.TypeBool,
+										Computed:    true,
+										Description: "Whether to enable the function of delivering access logs (Layer 7) to Object Storage TOS.",
+									},
+									"bucket_name": {
+										Type:        schema.TypeString,
+										Computed:    true,
+										Description: "The name of the bucket to which the access logs are delivered.",
+									},
+									"tls_enabled": {
+										Type:        schema.TypeBool,
+										Computed:    true,
+										Description: "Whether to enable the function of delivering access logs (layer 7) to the log service TLS.",
+									},
+									"tls_project_id": {
+										Type:        schema.TypeString,
+										Computed:    true,
+										Description: "The project ID of the log service TLS.",
+									},
+									"tls_topic_id": {
+										Type:        schema.TypeString,
+										Computed:    true,
+										Description: "The topic ID of the log service TLS.",
+									},
+								},
+							},
+						},
+						// 邀测中，查询CLB实例列表API返回
+						"exclusive_cluster_id": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "The ID of the exclusive cluster to which the CLB instance belongs.",
+						},
+						"bypass_security_group_enabled": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "Whether the CLB instance has enabled the \"Allow Backend Security Groups\" function.",
+						},
+						"timestamp_remove_enabled": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "Whether to enable the function of clearing the timestamp of TCP/HTTP/HTTPS packets (i.e., time stamp).",
+						},
+						"eni_address_num": {
+							Type:        schema.TypeInt,
+							Computed:    true,
+							Description: "The ENI address num of the CLB.",
+						},
+						"eni_addresses": {
+							Type:        schema.TypeList,
+							Computed:    true,
+							Description: "The ENI addresses of the CLB.",
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"eni_address": {
+										Type:        schema.TypeString,
+										Computed:    true,
+										Description: "The private IPv4 address of the CLB instance.",
+									},
+									"eip_id": {
+										Type:        schema.TypeString,
+										Computed:    true,
+										Description: "The eip ID of the public IP bound to the private IPv4 address.",
+									},
+									"eip_address": {
+										Type:        schema.TypeString,
+										Computed:    true,
+										Description: "The public IPv4 address bound to the private IPv4 address.",
+									},
+								},
+							},
+						},
 					},
 				},
 			},
@@ -306,6 +515,6 @@ func DataSourceVestackClbs() *schema.Resource {
 }
 
 func dataSourceVestackClbsRead(d *schema.ResourceData, meta interface{}) error {
-	clbService := NewClbService(meta.(*ve.SdkClient))
-	return ve.DefaultDispatcher().Data(clbService, d, DataSourceVestackClbs())
+	clbService := NewClbService(meta.(*bp.SdkClient))
+	return bp.DefaultDispatcher().Data(clbService, d, DataSourceVestackClbs())
 }

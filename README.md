@@ -92,3 +92,7 @@ $ export VESTACK_SECRET_KEY="your_private_key"
 $ export VESTACK_REGION="cn-beijing"
 $ terraform plan
 ```
+
+## Security and privacy
+This project takes security seriously.
+For vulnerability reporting and supported versions, see [SECURITY.md](SECURITY.md)

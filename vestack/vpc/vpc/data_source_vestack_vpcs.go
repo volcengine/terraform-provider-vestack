@@ -35,6 +35,11 @@ func DataSourceVestackVpcs() *schema.Resource {
 				Optional:    true,
 				Description: "The vpc name to query.",
 			},
+			"vpc_owner_id": {
+				Type:        schema.TypeInt,
+				Optional:    true,
+				Description: "The owner ID of the vpc.",
+			},
 			"tags": bp.TagsSchema(),
 
 			"output_file": {
@@ -174,6 +179,22 @@ func DataSourceVestackVpcs() *schema.Resource {
 							},
 							Set:         schema.HashString,
 							Description: "The auxiliary cidr block list of VPC.",
+						},
+						"secondary_cidr_blocks": {
+							Type:     schema.TypeList,
+							Computed: true,
+							Elem: &schema.Schema{
+								Type: schema.TypeString,
+							},
+							Description: "The secondary cidr block list of VPC.",
+						},
+						"user_cidr_blocks": {
+							Type:     schema.TypeList,
+							Computed: true,
+							Elem: &schema.Schema{
+								Type: schema.TypeString,
+							},
+							Description: "The user cidr block list of VPC.",
 						},
 						"ipv6_cidr_block": {
 							Type:        schema.TypeString,

@@ -31,21 +31,7 @@ func (s *VestackIamUserService) ReadResources(m map[string]interface{}) (data []
 		resp    *map[string]interface{}
 		results interface{}
 		ok      bool
-		nameSet = make(map[string]bool)
 	)
-	if _, ok = m["UserNames.1"]; ok {
-		i := 1
-		for {
-			filed := fmt.Sprintf("UserNames.%d", i)
-			tmpId, ok := m[filed]
-			if !ok {
-				break
-			}
-			nameSet[tmpId.(string)] = true
-			i++
-			delete(m, filed)
-		}
-	}
 	cens, err := bp.WithPageOffsetQuery(m, "Limit", "Offset", 100, 0, func(condition map[string]interface{}) ([]interface{}, error) {
 		universalClient := s.Client.UniversalClient
 		action := "ListUsers"
@@ -72,40 +58,34 @@ func (s *VestackIamUserService) ReadResources(m map[string]interface{}) (data []
 		if data, ok = results.([]interface{}); !ok {
 			return data, errors.New("Result.UserMetadata is not Slice")
 		}
+		data, err = removeSystemTags(data)
 		return data, err
 	})
-	if err != nil || len(nameSet) == 0 {
-		return cens, err
-	}
-
-	res := make([]interface{}, 0)
-	for _, cen := range cens {
-		if !nameSet[cen.(map[string]interface{})["UserName"].(string)] {
-			continue
-		}
-		res = append(res, cen)
-	}
-	return res, nil
+	return cens, err
 }
 
 func (s *VestackIamUserService) ReadResource(resourceData *schema.ResourceData, id string) (data map[string]interface{}, err error) {
 	var (
 		results []interface{}
-		ok      bool
 	)
 	if id == "" {
 		id = s.ReadResourceId(resourceData.Id())
 	}
 	req := map[string]interface{}{
-		"UserNames.1": id,
+		"Query": id,
 	}
 	results, err = s.ReadResources(req)
 	if err != nil {
 		return data, err
 	}
 	for _, v := range results {
-		if data, ok = v.(map[string]interface{}); !ok {
-			return data, errors.New("Value is not map ")
+		m, ok := v.(map[string]interface{})
+		if !ok {
+			return data, errors.New("result item is not map")
+		}
+		if name, ok := m["UserName"].(string); ok && name == id {
+			data = m
+			break
 		}
 	}
 	if len(data) == 0 {
@@ -125,7 +105,19 @@ func (VestackIamUserService) WithResourceResponseHandlers(v map[string]interface
 			"AccountId": {
 				TargetField: "account_id",
 				Convert: func(i interface{}) interface{} {
-					return strconv.FormatFloat(i.(float64), 'f', 0, 64)
+					if v, ok := i.(float64); ok {
+						return strconv.FormatFloat(v, 'f', 0, 64)
+					}
+					return ""
+				},
+			},
+			"Id": {
+				TargetField: "user_id",
+				Convert: func(i interface{}) interface{} {
+					if v, ok := i.(float64); ok {
+						return strconv.FormatFloat(v, 'f', 0, 64)
+					}
+					return ""
 				},
 			},
 		}, nil
@@ -139,13 +131,23 @@ func (s *VestackIamUserService) CreateResource(resourceData *schema.ResourceData
 		Call: bp.SdkCall{
 			Action:      "CreateUser",
 			ConvertMode: bp.RequestConvertAll,
+			Convert: map[string]bp.RequestConvert{
+				"tags": {
+					TargetField: "Tags",
+					ConvertType: bp.ConvertListN,
+				},
+			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
 			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam, resp)
-				d.SetId(d.Get("user_name").(string))
+				v, ok := d.Get("user_name").(string)
+				if !ok || v == "" {
+					return errors.New("user_name is not string or empty")
+				}
+				d.SetId(v)
 				return nil
 			},
 		},
@@ -155,6 +157,7 @@ func (s *VestackIamUserService) CreateResource(resourceData *schema.ResourceData
 }
 
 func (s *VestackIamUserService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
+	var callbacks []bp.Callback
 	callback := bp.Callback{
 		Call: bp.SdkCall{
 			Action:      "UpdateUser",
@@ -189,13 +192,19 @@ func (s *VestackIamUserService) ModifyResource(resourceData *schema.ResourceData
 			},
 			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 				if d.HasChange("user_name") {
-					d.SetId(d.Get("user_name").(string))
+					v, ok := d.Get("user_name").(string)
+					if !ok || v == "" {
+						return errors.New("user_name is not string or empty")
+					}
+					d.SetId(v)
 				}
 				return nil
 			},
 		},
 	}
-	return []bp.Callback{callback}
+	callbacks = append(callbacks, callback)
+	setResourceTagsCallbacks := s.setResourceTags(resourceData, "User", callbacks)
+	return setResourceTagsCallbacks
 }
 
 func (s *VestackIamUserService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []bp.Callback {
@@ -217,19 +226,54 @@ func (s *VestackIamUserService) RemoveResource(resourceData *schema.ResourceData
 func (s *VestackIamUserService) DatasourceResources(*schema.ResourceData, *schema.Resource) bp.DataSourceInfo {
 	return bp.DataSourceInfo{
 		RequestConverts: map[string]bp.RequestConvert{
-			"user_names": {
-				TargetField: "UserNames",
-				ConvertType: bp.ConvertWithN,
+			"query": {
+				TargetField: "Query",
 			},
 		},
 		NameField:    "UserName",
 		IdField:      "UserName",
 		CollectField: "users",
 		ResponseConverts: map[string]bp.ResponseConvert{
+			"Id": {
+				TargetField: "user_id",
+				Convert: func(i interface{}) interface{} {
+					if v, ok := i.(float64); ok {
+						return strconv.FormatFloat(v, 'f', 0, 64)
+					}
+					return ""
+				},
+			},
 			"AccountId": {
 				TargetField: "account_id",
 				Convert: func(i interface{}) interface{} {
-					return strconv.FormatFloat(i.(float64), 'f', 0, 64)
+					if v, ok := i.(float64); ok {
+						return strconv.FormatFloat(v, 'f', 0, 64)
+					}
+					return ""
+				},
+			},
+			"Tags": {
+				TargetField: "tags",
+				Convert: func(i interface{}) interface{} {
+					if i == nil {
+						return nil
+					}
+					var tags []map[string]interface{}
+					if list, ok := i.([]interface{}); ok {
+						for _, v := range list {
+							if m, ok := v.(map[string]interface{}); ok {
+								tag := make(map[string]interface{})
+								if key, ok := m["Key"].(string); ok {
+									tag["key"] = key
+								}
+								if value, ok := m["Value"].(string); ok {
+									tag["value"] = value
+								}
+								tags = append(tags, tag)
+							}
+						}
+					}
+					return tags
 				},
 			},
 		},
@@ -247,5 +291,100 @@ func getUniversalInfo(actionName string) bp.UniversalInfo {
 		Version:     "2018-01-01",
 		HttpMethod:  bp.GET,
 		ContentType: bp.Default,
+		RegionType:  bp.Global,
 	}
+}
+
+func (s *VestackIamUserService) setResourceTags(resourceData *schema.ResourceData, resourceType string, callbacks []bp.Callback) []bp.Callback {
+	addedTags, removedTags, _, _ := bp.GetSetDifference("tags", resourceData, bp.TagsHash, false)
+
+	removeCallback := bp.Callback{
+		Call: bp.SdkCall{
+			Action:      "UntagResources",
+			ConvertMode: bp.RequestConvertIgnore,
+			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+				if removedTags != nil && len(removedTags.List()) > 0 {
+					(*call.SdkParam)["ResourceNames.1"] = resourceData.Id()
+					(*call.SdkParam)["ResourceType"] = resourceType
+					for index, tag := range removedTags.List() {
+						tm, ok := tag.(map[string]interface{})
+						if !ok {
+							return false, errors.New("tag item is not map")
+						}
+						key, ok := tm["key"].(string)
+						if !ok {
+							return false, errors.New("tag key is not string")
+						}
+						(*call.SdkParam)["TagKeys."+strconv.Itoa(index+1)] = key
+					}
+					return true, nil
+				}
+				return false, nil
+			},
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
+			},
+		},
+	}
+	callbacks = append(callbacks, removeCallback)
+
+	addCallback := bp.Callback{
+		Call: bp.SdkCall{
+			Action:      "TagResources",
+			ConvertMode: bp.RequestConvertIgnore,
+			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+				if addedTags != nil && len(addedTags.List()) > 0 {
+					(*call.SdkParam)["ResourceNames.1"] = resourceData.Id()
+					(*call.SdkParam)["ResourceType"] = resourceType
+					for index, tag := range addedTags.List() {
+						tm, ok := tag.(map[string]interface{})
+						if !ok {
+							return false, errors.New("tag item is not map")
+						}
+						key, ok := tm["key"].(string)
+						if !ok {
+							return false, errors.New("tag key is not string")
+						}
+						value, ok := tm["value"].(string)
+						if !ok {
+							return false, errors.New("tag value is not string")
+						}
+						(*call.SdkParam)["Tags."+strconv.Itoa(index+1)+".Key"] = key
+						(*call.SdkParam)["Tags."+strconv.Itoa(index+1)+".Value"] = value
+					}
+					return true, nil
+				}
+				return false, nil
+			},
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
+			},
+		},
+	}
+	callbacks = append(callbacks, addCallback)
+
+	return callbacks
+}
+
+func removeSystemTags(data []interface{}) ([]interface{}, error) {
+	var (
+		ok      bool
+		result  map[string]interface{}
+		results []interface{}
+		tags    []interface{}
+	)
+	for _, d := range data {
+		if result, ok = d.(map[string]interface{}); !ok {
+			return results, errors.New("The elements in data are not map ")
+		}
+		tags, ok = result["Tags"].([]interface{})
+		if ok {
+			tags = bp.FilterSystemTags(tags)
+			result["Tags"] = tags
+		}
+		results = append(results, result)
+	}
+	return results, nil
 }

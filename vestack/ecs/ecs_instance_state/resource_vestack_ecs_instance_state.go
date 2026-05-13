@@ -38,7 +38,8 @@ func ResourceVestackEcsInstanceState() *schema.Resource {
 				Type:         schema.TypeString,
 				Required:     true,
 				ValidateFunc: validation.StringInSlice([]string{"Start", "Stop", "ForceStop"}, false),
-				Description:  "Start or Stop of Instance Action, the value can be `Start`, `Stop` or `ForceStop`.",
+				Description: "Start or Stop of Instance Action, the value can be `Start`, `Stop` or `ForceStop`. \n" +
+					"If the target status of the action is consistent with the current status of the instance, the action will not actually be executed.",
 			},
 			"instance_id": {
 				Type:        schema.TypeString,
@@ -47,15 +48,14 @@ func ResourceVestackEcsInstanceState() *schema.Resource {
 				Description: "Id of Instance.",
 			},
 			"stopped_mode": {
-				Type:         schema.TypeString,
-				Optional:     true,
-				Default:      "KeepCharging",
-				ValidateFunc: validation.StringInSlice([]string{"KeepCharging", "StopCharging"}, false),
+				Type:     schema.TypeString,
+				Optional: true,
+				Computed: true,
 				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
 					// 如开机行为，该字段修改忽略
 					return d.Get("action").(string) == "Start"
 				},
-				Description: "Stop Mode of Instance, the value can be `KeepCharging` or `StopCharging`, default `KeepCharging`.",
+				Description: "Stop Mode of Instance, the value can be `KeepCharging` or `StopCharging`.",
 			},
 			"status": {
 				Type:        schema.TypeString,

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hashicorp/terraform-plugin-sdk/helper/encryption"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	bp "github.com/volcengine/terraform-provider-vestack/common"
@@ -41,7 +40,9 @@ func (s *VestackIamAccessKeyService) ReadResources(m map[string]interface{}) (da
 			if !ok {
 				break
 			}
-			idSet[tmpId.(string)] = true
+			if s, ok := tmpId.(string); ok {
+				idSet[s] = true
+			}
 			i++
 			delete(m, filed)
 		}
@@ -80,7 +81,15 @@ func (s *VestackIamAccessKeyService) ReadResources(m map[string]interface{}) (da
 
 	res := make([]interface{}, 0)
 	for _, cen := range cens {
-		if !idSet[cen.(map[string]interface{})["AccessKeyId"].(string)] {
+		m, ok := cen.(map[string]interface{})
+		if !ok {
+			return nil, errors.New("result item is not map")
+		}
+		akId, ok := m["AccessKeyId"].(string)
+		if !ok {
+			return nil, errors.New("result item AccessKeyId is not string")
+		}
+		if !idSet[akId] {
 			continue
 		}
 		res = append(res, cen)
@@ -99,8 +108,10 @@ func (s *VestackIamAccessKeyService) ReadResource(resourceData *schema.ResourceD
 	req := map[string]interface{}{
 		"AccessKeyIds.1": id,
 	}
-	if resourceData.Get("user_name") != nil && len(resourceData.Get("user_name").(string)) > 0 {
-		req["UserName"] = resourceData.Get("user_name").(string)
+	if v := resourceData.Get("user_name"); v != nil {
+		if userName, ok := v.(string); ok && len(userName) > 0 {
+			req["UserName"] = userName
+		}
 	}
 	results, err = s.ReadResources(req)
 	if err != nil {
@@ -140,12 +151,16 @@ func (s *VestackIamAccessKeyService) RefreshResourceState(resourceData *schema.R
 				return nil, "", err
 			}
 			for _, v := range failStates {
-				if v == status.(string) {
-					return nil, "", fmt.Errorf("access key status error, status:%s", status.(string))
+				if s, ok := status.(string); ok && v == s {
+					return nil, "", fmt.Errorf("access key status error, status:%s", s)
 				}
 			}
 			//注意 返回的第一个参数不能为空 否则会一直等下去
-			return demo, status.(string), err
+			s, ok := status.(string)
+			if !ok {
+				s = ""
+			}
+			return demo, s, err
 		},
 	}
 
@@ -179,31 +194,49 @@ func (s *VestackIamAccessKeyService) CreateResource(resourceData *schema.Resourc
 			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam, *resp)
 				//注意 获取内容 这个地方不能是指针 需要转一次
-				id, _ := bp.ObtainSdkValue("Result.AccessKey.AccessKeyId", *resp)
-				d.SetId(id.(string))
-				sk, _ := bp.ObtainSdkValue("Result.AccessKey.SecretAccessKey", *resp)
-				if v, ok := d.GetOk("pgp_key"); ok && len(v.(string)) > 0 {
-					pgpKey := v.(string)
-					encryptionKey, err := encryption.RetrieveGPGKey(pgpKey)
-					if err != nil {
-						return fmt.Errorf("get gpg key error: %s", err.Error())
-					}
-					fingerprint, encrypted, err := encryption.EncryptValue(encryptionKey, sk.(string), "Vestack IAM Access Key Secret")
-					if err != nil {
-						return fmt.Errorf("encrypt secret err: %s", err.Error())
-					}
-					_ = d.Set("key_fingerprint", fingerprint)
-					_ = d.Set("encrypted_secret", encrypted)
-				} else {
-					_ = d.Set("secret", sk.(string))
+				id, err := bp.ObtainSdkValue("Result.AccessKey.AccessKeyId", *resp)
+				if err != nil {
+					return err
 				}
-				if output, ok := d.GetOk("secret_file"); ok && output != nil {
-					akSk, _ := bp.ObtainSdkValue("Result.AccessKey", *resp)
-					if err := writeToFile(output.(string), akSk); err != nil {
-						return fmt.Errorf("write secret to file err: %s", err.Error())
-					}
+				if idStr, ok := id.(string); ok {
+					d.SetId(idStr)
+					d.Set("access_key_id", idStr)
 				}
-
+				sk, err := bp.ObtainSdkValue("Result.AccessKey.SecretAccessKey", *resp)
+				if err != nil {
+					return err
+				}
+				if skStr, ok := sk.(string); ok {
+					d.Set("secret_access_key", skStr)
+				}
+				createDate, err := bp.ObtainSdkValue("Result.AccessKey.CreateDate", *resp)
+				if err != nil {
+					return err
+				}
+				if cdStr, ok := createDate.(string); ok {
+					d.Set("create_date", cdStr)
+				}
+				updateDate, err := bp.ObtainSdkValue("Result.AccessKey.UpdateDate", *resp)
+				if err != nil {
+					return err
+				}
+				if udStr, ok := updateDate.(string); ok {
+					d.Set("update_date", udStr)
+				}
+				userName, err := bp.ObtainSdkValue("Result.AccessKey.UserName", *resp)
+				if err != nil {
+					return err
+				}
+				if unStr, ok := userName.(string); ok {
+					d.Set("user_name", unStr)
+				}
+				status, err := bp.ObtainSdkValue("Result.AccessKey.Status", *resp)
+				if err != nil {
+					return err
+				}
+				if sStr, ok := status.(string); ok {
+					d.Set("status", sStr)
+				}
 				return nil
 			},
 		},
@@ -211,8 +244,10 @@ func (s *VestackIamAccessKeyService) CreateResource(resourceData *schema.Resourc
 	callbacks = append(callbacks, callback)
 
 	// 更新ak状态
-	if resourceData.Get("status") != nil {
-		callbacks = append(callbacks, s.updateAccessKeyStatus(resourceData.Get("status").(string), resourceData))
+	if v := resourceData.Get("status"); v != nil {
+		if status, ok := v.(string); ok && len(status) > 0 {
+			callbacks = append(callbacks, s.updateAccessKeyStatus(status, resourceData))
+		}
 	}
 
 	return callbacks
@@ -221,7 +256,11 @@ func (s *VestackIamAccessKeyService) CreateResource(resourceData *schema.Resourc
 func (s *VestackIamAccessKeyService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
 	callbacks := make([]bp.Callback, 0)
 	if resourceData.HasChange("status") {
-		callbacks = append(callbacks, s.updateAccessKeyStatus(resourceData.Get("status").(string), resourceData))
+		status, ok := resourceData.Get("status").(string)
+		if !ok {
+			return []bp.Callback{{Err: errors.New("status is not string")}}
+		}
+		callbacks = append(callbacks, s.updateAccessKeyStatus(status, resourceData))
 	}
 	return callbacks
 }
@@ -271,7 +310,15 @@ func (s *VestackIamAccessKeyService) RemoveResource(resourceData *schema.Resourc
 }
 
 func (s *VestackIamAccessKeyService) DatasourceResources(*schema.ResourceData, *schema.Resource) bp.DataSourceInfo {
-	return bp.DataSourceInfo{}
+	return bp.DataSourceInfo{
+		RequestConverts: map[string]bp.RequestConvert{
+			"user_name": {
+				TargetField: "UserName",
+			},
+		},
+		IdField:      "UserName",
+		CollectField: "access_key_metadata",
+	}
 }
 
 func (s *VestackIamAccessKeyService) ReadResourceId(id string) string {
@@ -285,6 +332,7 @@ func getUniversalInfo(actionName string) bp.UniversalInfo {
 		Version:     "2018-01-01",
 		HttpMethod:  bp.GET,
 		ContentType: bp.Default,
+		RegionType:  bp.Global,
 	}
 }
 

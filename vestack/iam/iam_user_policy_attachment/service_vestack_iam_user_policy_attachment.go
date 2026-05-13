@@ -83,7 +83,16 @@ func (s *VestackIamUserPolicyAttachmentService) ReadResource(resourceData *schem
 	for _, v := range results {
 		if data, ok = v.(map[string]interface{}); !ok {
 			return data, errors.New("value is not map")
-		} else if ids[1] == data["PolicyName"].(string) && ids[2] == data["PolicyType"].(string) {
+		}
+		pName, ok := data["PolicyName"].(string)
+		if !ok {
+			continue
+		}
+		pType, ok := data["PolicyType"].(string)
+		if !ok {
+			continue
+		}
+		if ids[1] == pName && ids[2] == pType {
 			return data, err
 		}
 	}
@@ -111,8 +120,19 @@ func (s *VestackIamUserPolicyAttachmentService) CreateResource(data *schema.Reso
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
 			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
-				d.SetId(fmt.Sprintf("%s:%s:%s", d.Get("user_name").(string),
-					d.Get("policy_name").(string), d.Get("policy_type").(string)))
+				userName, ok := d.Get("user_name").(string)
+				if !ok {
+					return errors.New("user_name is not string")
+				}
+				policyName, ok := d.Get("policy_name").(string)
+				if !ok {
+					return errors.New("policy_name is not string")
+				}
+				policyType, ok := d.Get("policy_type").(string)
+				if !ok {
+					return errors.New("policy_type is not string")
+				}
+				d.SetId(fmt.Sprintf("%s:%s:%s", userName, policyName, policyType))
 				return nil
 			},
 		},
@@ -164,7 +184,29 @@ func (s *VestackIamUserPolicyAttachmentService) RemoveResource(data *schema.Reso
 }
 
 func (s *VestackIamUserPolicyAttachmentService) DatasourceResources(data *schema.ResourceData, resource *schema.Resource) bp.DataSourceInfo {
-	return bp.DataSourceInfo{}
+	return bp.DataSourceInfo{
+		ResponseConverts: map[string]bp.ResponseConvert{
+			"PolicyName": {
+				TargetField: "policy_name",
+			},
+			"PolicyType": {
+				TargetField: "policy_type",
+			},
+			"PolicyTrn": {
+				TargetField: "policy_trn",
+			},
+			"Description": {
+				TargetField: "description",
+			},
+			"AttachDate": {
+				TargetField: "attach_date",
+			},
+			"PolicyScope": {
+				TargetField: "policy_scope",
+			},
+		},
+		CollectField: "policies",
+	}
 }
 
 func (s *VestackIamUserPolicyAttachmentService) ReadResourceId(id string) string {
@@ -174,8 +216,10 @@ func (s *VestackIamUserPolicyAttachmentService) ReadResourceId(id string) string
 func getUniversalInfo(actionName string) bp.UniversalInfo {
 	return bp.UniversalInfo{
 		ServiceName: "iam",
+		Action:      actionName,
 		Version:     "2018-01-01",
 		HttpMethod:  bp.GET,
-		Action:      actionName,
+		ContentType: bp.Default,
+		RegionType:  bp.Global,
 	}
 }

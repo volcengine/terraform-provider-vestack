@@ -117,6 +117,12 @@ func (s *VestackEcsKeyPairService) CreateResource(resourceData *schema.ResourceD
 		Call: bp.SdkCall{
 			Action:      action,
 			ConvertMode: bp.RequestConvertAll,
+			Convert: map[string]bp.RequestConvert{
+				"tags": {
+					TargetField: "Tags",
+					ConvertType: bp.ConvertListN,
+				},
+			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
@@ -142,24 +148,32 @@ func (s *VestackEcsKeyPairService) CreateResource(resourceData *schema.ResourceD
 }
 
 func (s *VestackEcsKeyPairService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
-	callback := bp.Callback{
-		Call: bp.SdkCall{
-			Action:      "ModifyKeyPairAttribute",
-			ConvertMode: bp.RequestConvertAll,
-			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
-				(*call.SdkParam)["KeyPairId"] = d.Id()
-				return true, nil
+	var callbacks []bp.Callback
+	if resourceData.HasChange("description") {
+		callback := bp.Callback{
+			Call: bp.SdkCall{
+				Action:      "ModifyKeyPairAttribute",
+				ConvertMode: bp.RequestConvertAll,
+				BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+					(*call.SdkParam)["KeyPairId"] = d.Id()
+					return true, nil
+				},
+				ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+					logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
+					return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
+				},
+				AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
+					return nil
+				},
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
-				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
-				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
-			},
-			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
-				return nil
-			},
-		},
+		}
+		callbacks = append(callbacks, callback)
 	}
-	return []bp.Callback{callback}
+
+	// 更新 tags
+	setResourceTagsCallbacks := bp.SetResourceTags(s.Client, "CreateTags", "DeleteTags", "keypair", resourceData, getUniversalInfo)
+	callbacks = append(callbacks, setResourceTagsCallbacks...)
+	return callbacks
 }
 
 func (s *VestackEcsKeyPairService) RemoveResource(d *schema.ResourceData, r *schema.Resource) []bp.Callback {
@@ -207,6 +221,15 @@ func (s *VestackEcsKeyPairService) DatasourceResources(data *schema.ResourceData
 				TargetField: "KeyPairNames",
 				ConvertType: bp.ConvertWithN,
 			},
+			"tags": {
+				TargetField: "TagFilters",
+				ConvertType: bp.ConvertListN,
+				NextLevelConvert: map[string]bp.RequestConvert{
+					"value": {
+						TargetField: "Values.1",
+					},
+				},
+			},
 		},
 		ResponseConverts: map[string]bp.ResponseConvert{
 			"KeyPairId": {
@@ -222,6 +245,15 @@ func (s *VestackEcsKeyPairService) DatasourceResources(data *schema.ResourceData
 
 func (VestackEcsKeyPairService) ReadResourceId(id string) string {
 	return id
+}
+
+func (s *VestackEcsKeyPairService) ProjectTrn() *bp.ProjectTrn {
+	return &bp.ProjectTrn{
+		ServiceName:          "ecs",
+		ResourceType:         "keypair",
+		ProjectResponseField: "ProjectName",
+		ProjectSchemaField:   "project_name",
+	}
 }
 
 func getUniversalInfo(actionName string) bp.UniversalInfo {

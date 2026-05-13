@@ -163,6 +163,10 @@ func (s *VestackNetworkAclService) CreateResource(resourceData *schema.ResourceD
 				"resources": {
 					Ignore: true,
 				},
+				"tags": {
+					TargetField: "Tags",
+					ConvertType: bp.ConvertListN,
+				},
 			},
 			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 				(*call.SdkParam)["ClientToken"] = uuid.New().String()
@@ -253,6 +257,9 @@ func (s *VestackNetworkAclService) ModifyResource(resourceData *schema.ResourceD
 					Ignore: true,
 				},
 				"resources": {
+					Ignore: true,
+				},
+				"tags": {
 					Ignore: true,
 				},
 			},
@@ -364,6 +371,10 @@ func (s *VestackNetworkAclService) ModifyResource(resourceData *schema.ResourceD
 		callbacks = append(callbacks, ingressUpdateCallback)
 	}
 
+	// 更新Tags
+	setResourceTagsCallbacks := bp.SetResourceTags(s.Client, "TagResources", "UntagResources", "networkacl", resourceData, getUniversalInfo)
+	callbacks = append(callbacks, setResourceTagsCallbacks...)
+
 	return callbacks
 }
 
@@ -422,6 +433,15 @@ func (s *VestackNetworkAclService) DatasourceResources(*schema.ResourceData, *sc
 			"ids": {
 				TargetField: "NetworkAclIds",
 				ConvertType: bp.ConvertWithN,
+			},
+			"tags": {
+				TargetField: "TagFilters",
+				ConvertType: bp.ConvertListN,
+				NextLevelConvert: map[string]bp.RequestConvert{
+					"value": {
+						TargetField: "Values.1",
+					},
+				},
 			},
 		},
 		NameField:    "NetworkAclName",

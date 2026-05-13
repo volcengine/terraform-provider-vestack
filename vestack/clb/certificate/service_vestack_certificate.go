@@ -7,21 +7,21 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 	"github.com/volcengine/terraform-provider-vestack/logger"
 )
 
 type VestackCertificateService struct {
-	Client *ve.SdkClient
+	Client *bp.SdkClient
 }
 
-func NewCertificateService(c *ve.SdkClient) *VestackCertificateService {
+func NewCertificateService(c *bp.SdkClient) *VestackCertificateService {
 	return &VestackCertificateService{
 		Client: c,
 	}
 }
 
-func (s *VestackCertificateService) GetClient() *ve.SdkClient {
+func (s *VestackCertificateService) GetClient() *bp.SdkClient {
 	return s.Client
 }
 
@@ -31,7 +31,7 @@ func (s *VestackCertificateService) ReadResources(condition map[string]interface
 		results interface{}
 		ok      bool
 	)
-	return ve.WithPageNumberQuery(condition, "PageSize", "PageNumber", 20, 1, func(m map[string]interface{}) ([]interface{}, error) {
+	return bp.WithPageNumberQuery(condition, "PageSize", "PageNumber", 20, 1, func(m map[string]interface{}) ([]interface{}, error) {
 		action := "DescribeCertificates"
 		logger.Debug(logger.ReqFormat, action, condition)
 		if condition == nil {
@@ -46,7 +46,7 @@ func (s *VestackCertificateService) ReadResources(condition map[string]interface
 			}
 		}
 
-		results, err = ve.ObtainSdkValue("Result.Certificates", *resp)
+		results, err = bp.ObtainSdkValue("Result.Certificates", *resp)
 		if err != nil {
 			return data, err
 		}
@@ -56,6 +56,7 @@ func (s *VestackCertificateService) ReadResources(condition map[string]interface
 		if data, ok = results.([]interface{}); !ok {
 			return data, errors.New("Result.Certificates is not Slice")
 		}
+		data, err = removeSystemTags(data)
 		return data, err
 	})
 }
@@ -90,50 +91,50 @@ func (s *VestackCertificateService) RefreshResourceState(resourceData *schema.Re
 	return nil
 }
 
-func (VestackCertificateService) WithResourceResponseHandlers(certificate map[string]interface{}) []ve.ResourceResponseHandler {
-	handler := func() (map[string]interface{}, map[string]ve.ResponseConvert, error) {
+func (VestackCertificateService) WithResourceResponseHandlers(certificate map[string]interface{}) []bp.ResourceResponseHandler {
+	handler := func() (map[string]interface{}, map[string]bp.ResponseConvert, error) {
 		return certificate, nil, nil
 	}
-	return []ve.ResourceResponseHandler{handler}
+	return []bp.ResourceResponseHandler{handler}
 
 }
 
-func (s *VestackCertificateService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []ve.Callback {
-	callback := ve.Callback{
-		Call: ve.SdkCall{
+func (s *VestackCertificateService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
+	callback := bp.Callback{
+		Call: bp.SdkCall{
 			Action:      "UploadCertificate",
-			ConvertMode: ve.RequestConvertAll,
-			Convert: map[string]ve.RequestConvert{
+			ConvertMode: bp.RequestConvertAll,
+			Convert: map[string]bp.RequestConvert{
 				"tags": {
 					TargetField: "Tags",
-					ConvertType: ve.ConvertListN,
+					ConvertType: bp.ConvertListN,
 				},
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				//创建certificate
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
-			AfterCall: func(d *schema.ResourceData, client *ve.SdkClient, resp *map[string]interface{}, call ve.SdkCall) error {
+			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 				//注意 获取内容 这个地方不能是指针 需要转一次
-				id, _ := ve.ObtainSdkValue("Result.CertificateId", *resp)
+				id, _ := bp.ObtainSdkValue("Result.CertificateId", *resp)
 				d.SetId(id.(string))
 				return nil
 			},
 		},
 	}
-	return []ve.Callback{callback}
+	return []bp.Callback{callback}
 
 }
 
-func (s *VestackCertificateService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []ve.Callback {
-	var callbacks []ve.Callback
+func (s *VestackCertificateService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
+	var callbacks []bp.Callback
 
-	callback := ve.Callback{
-		Call: ve.SdkCall{
+	callback := bp.Callback{
+		Call: bp.SdkCall{
 			Action:      "ModifyCertificateAttributes",
-			ConvertMode: ve.RequestConvertInConvert,
-			Convert: map[string]ve.RequestConvert{
+			ConvertMode: bp.RequestConvertInConvert,
+			Convert: map[string]bp.RequestConvert{
 				"certificate_name": {
 					TargetField: "CertificateName",
 				},
@@ -141,14 +142,14 @@ func (s *VestackCertificateService) ModifyResource(resourceData *schema.Resource
 					TargetField: "Description",
 				},
 			},
-			BeforeCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (bool, error) {
+			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 				if len(*call.SdkParam) > 0 {
 					(*call.SdkParam)["CertificateId"] = d.Id()
 					return true, nil
 				}
 				return false, nil
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
@@ -157,31 +158,31 @@ func (s *VestackCertificateService) ModifyResource(resourceData *schema.Resource
 	callbacks = append(callbacks, callback)
 
 	// 更新Tags
-	setResourceTagsCallbacks := ve.SetResourceTags(s.Client, "TagResources", "UntagResources", "Certificate", resourceData, getUniversalInfo)
+	setResourceTagsCallbacks := bp.SetResourceTags(s.Client, "TagResources", "UntagResources", "certificate", resourceData, getUniversalInfo)
 	callbacks = append(callbacks, setResourceTagsCallbacks...)
 
 	return callbacks
 }
 
-func (s *VestackCertificateService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []ve.Callback {
-	callback := ve.Callback{
-		Call: ve.SdkCall{
+func (s *VestackCertificateService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []bp.Callback {
+	callback := bp.Callback{
+		Call: bp.SdkCall{
 			Action:      "DeleteCertificate",
-			ConvertMode: ve.RequestConvertIgnore,
+			ConvertMode: bp.RequestConvertIgnore,
 			SdkParam: &map[string]interface{}{
 				"CertificateId": resourceData.Id(),
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				//删除Certificate
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
-			CallError: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall, baseErr error) error {
+			CallError: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall, baseErr error) error {
 				//出现错误后重试
 				return resource.Retry(15*time.Minute, func() *resource.RetryError {
 					_, callErr := s.ReadResource(d, "")
 					if callErr != nil {
-						if ve.ResourceNotFoundError(callErr) {
+						if bp.ResourceNotFoundError(callErr) {
 							return nil
 						} else {
 							return resource.NonRetryableError(fmt.Errorf("error on  reading certificate on delete %q, %w", d.Id(), callErr))
@@ -196,20 +197,20 @@ func (s *VestackCertificateService) RemoveResource(resourceData *schema.Resource
 			},
 		},
 	}
-	return []ve.Callback{callback}
+	return []bp.Callback{callback}
 }
 
-func (s *VestackCertificateService) DatasourceResources(*schema.ResourceData, *schema.Resource) ve.DataSourceInfo {
-	return ve.DataSourceInfo{
-		RequestConverts: map[string]ve.RequestConvert{
+func (s *VestackCertificateService) DatasourceResources(*schema.ResourceData, *schema.Resource) bp.DataSourceInfo {
+	return bp.DataSourceInfo{
+		RequestConverts: map[string]bp.RequestConvert{
 			"ids": {
 				TargetField: "CertificateIds",
-				ConvertType: ve.ConvertWithN,
+				ConvertType: bp.ConvertWithN,
 			},
 			"tags": {
 				TargetField: "TagFilters",
-				ConvertType: ve.ConvertListN,
-				NextLevelConvert: map[string]ve.RequestConvert{
+				ConvertType: bp.ConvertListN,
+				NextLevelConvert: map[string]bp.RequestConvert{
 					"value": {
 						TargetField: "Values.1",
 					},
@@ -219,7 +220,7 @@ func (s *VestackCertificateService) DatasourceResources(*schema.ResourceData, *s
 		NameField:    "CertificateName",
 		IdField:      "CertificateId",
 		CollectField: "certificates",
-		ResponseConverts: map[string]ve.ResponseConvert{
+		ResponseConverts: map[string]bp.ResponseConvert{
 			"CertificateId": {
 				TargetField: "id",
 				KeepDefault: true,
@@ -232,12 +233,33 @@ func (s *VestackCertificateService) ReadResourceId(id string) string {
 	return id
 }
 
-func getUniversalInfo(actionName string) ve.UniversalInfo {
-	return ve.UniversalInfo{
+func removeSystemTags(data []interface{}) ([]interface{}, error) {
+	var (
+		ok      bool
+		result  map[string]interface{}
+		results []interface{}
+		tags    []interface{}
+	)
+	for _, d := range data {
+		if result, ok = d.(map[string]interface{}); !ok {
+			return results, errors.New("The elements in data are not map ")
+		}
+		tags, ok = result["Tags"].([]interface{})
+		if ok {
+			tags = bp.FilterSystemTags(tags)
+			result["Tags"] = tags
+		}
+		results = append(results, result)
+	}
+	return results, nil
+}
+
+func getUniversalInfo(actionName string) bp.UniversalInfo {
+	return bp.UniversalInfo{
 		ServiceName: "clb",
 		Version:     "2020-04-01",
-		HttpMethod:  ve.GET,
-		ContentType: ve.Default,
+		HttpMethod:  bp.GET,
+		ContentType: bp.Default,
 		Action:      actionName,
 	}
 }

@@ -7,21 +7,21 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 	"github.com/volcengine/terraform-provider-vestack/logger"
 )
 
 type VestackClbService struct {
-	Client *ve.SdkClient
+	Client *bp.SdkClient
 }
 
-func NewClbService(c *ve.SdkClient) *VestackClbService {
+func NewClbService(c *bp.SdkClient) *VestackClbService {
 	return &VestackClbService{
 		Client: c,
 	}
 }
 
-func (s *VestackClbService) GetClient() *ve.SdkClient {
+func (s *VestackClbService) GetClient() *bp.SdkClient {
 	return s.Client
 }
 
@@ -31,7 +31,8 @@ func (s *VestackClbService) ReadResources(condition map[string]interface{}) (dat
 		results interface{}
 		ok      bool
 	)
-	data, err = ve.WithPageNumberQuery(condition, "PageSize", "PageNumber", 20, 1, func(m map[string]interface{}) ([]interface{}, error) {
+	// 使用分页查询获取所有CLB实例
+	data, err = bp.WithPageNumberQuery(condition, "PageSize", "PageNumber", 20, 1, func(m map[string]interface{}) ([]interface{}, error) {
 		action := "DescribeLoadBalancers"
 		logger.Debug(logger.ReqFormat, action, condition)
 		if condition == nil {
@@ -47,7 +48,7 @@ func (s *VestackClbService) ReadResources(condition map[string]interface{}) (dat
 		}
 		logger.Debug(logger.RespFormat, action, condition, *resp)
 
-		results, err = ve.ObtainSdkValue("Result.LoadBalancers", *resp)
+		results, err = bp.ObtainSdkValue("Result.LoadBalancers", *resp)
 		if err != nil {
 			return data, err
 		}
@@ -57,18 +58,22 @@ func (s *VestackClbService) ReadResources(condition map[string]interface{}) (dat
 		if data, ok = results.([]interface{}); !ok {
 			return data, errors.New("Result.LoadBalancers is not Slice")
 		}
+		// 移除系统标签
+		data, err = removeSystemTags(data)
 		return data, err
 	})
 	if err != nil {
 		return data, err
 	}
 
+	// 为每个CLB实例获取详细信息和计费信息
 	for _, value := range data {
 		clb, ok := value.(map[string]interface{})
 		if !ok {
 			return data, fmt.Errorf(" Clb is not map ")
 		}
 
+		// 获取CLB详细信息，包括EIP配置和IPv6带宽信息
 		eipAction := "DescribeLoadBalancerAttributes"
 		eipReq := map[string]interface{}{
 			"LoadBalancerId": clb["LoadBalancerId"],
@@ -80,22 +85,53 @@ func (s *VestackClbService) ReadResources(condition map[string]interface{}) (dat
 		}
 		logger.Debug(logger.RespFormat, eipAction, *eipResp)
 
-		eipConfig, err := ve.ObtainSdkValue("Result.Eip", *eipResp)
+		eipConfig, err := bp.ObtainSdkValue("Result.Eip", *eipResp)
 		if err != nil {
 			return data, err
 		}
 		clb["EipBillingConfig"] = eipConfig
 
-		ipv6EipConfig, err := ve.ObtainSdkValue("Result.Ipv6AddressBandwidth", *eipResp)
+		ipv6EipConfig, err := bp.ObtainSdkValue("Result.Ipv6AddressBandwidth", *eipResp)
 		if err != nil {
 			return data, err
 		}
 		clb["Ipv6AddressBandwidth"] = ipv6EipConfig
 
+		logTopicId, err := bp.ObtainSdkValue("Result.LogTopicId", *eipResp)
+		if err != nil {
+			return data, err
+		}
+		clb["LogTopicId"] = logTopicId
+
+		enabled, err := bp.ObtainSdkValue("Result.Enabled", *eipResp)
+		if err != nil {
+			return data, err
+		}
+		clb["Enabled"] = enabled
+
+		listeners, err := bp.ObtainSdkValue("Result.Listeners", *eipResp)
+		if err != nil {
+			return data, err
+		}
+		clb["Listeners"] = listeners
+
+		serverGroups, err := bp.ObtainSdkValue("Result.ServerGroups", *eipResp)
+		if err != nil {
+			return data, err
+		}
+		clb["ServerGroups"] = serverGroups
+
+		accessLog, err := bp.ObtainSdkValue("Result.AccessLog", *eipResp)
+		if err != nil {
+			return data, err
+		}
+		clb["AccessLog"] = accessLog
+
 		// `PostPaid` 实例不需查询续费相关信息
 		if billingType := clb["LoadBalancerBillingType"]; billingType == 2.0 {
 			continue
 		}
+		// 获取计费信息（仅对PrePaid类型）
 		billingAction := "DescribeLoadBalancersBilling"
 		billingReq := map[string]interface{}{
 			"LoadBalancerIds.1": clb["LoadBalancerId"],
@@ -107,7 +143,7 @@ func (s *VestackClbService) ReadResources(condition map[string]interface{}) (dat
 		}
 		logger.Debug(logger.RespFormat, billingAction, *billingResp)
 
-		billingConfigs, err := ve.ObtainSdkValue("Result.LoadBalancerBillingConfigs", *billingResp)
+		billingConfigs, err := bp.ObtainSdkValue("Result.LoadBalancerBillingConfigs", *billingResp)
 		if err != nil {
 			return data, err
 		}
@@ -180,7 +216,7 @@ func (s *VestackClbService) RefreshResourceState(resourceData *schema.ResourceDa
 			if err != nil {
 				return nil, "", err
 			}
-			status, err = ve.ObtainSdkValue("Status", demo)
+			status, err = bp.ObtainSdkValue("Status", demo)
 			if err != nil {
 				return nil, "", err
 			}
@@ -196,9 +232,9 @@ func (s *VestackClbService) RefreshResourceState(resourceData *schema.ResourceDa
 
 }
 
-func (VestackClbService) WithResourceResponseHandlers(clb map[string]interface{}) []ve.ResourceResponseHandler {
-	handler := func() (map[string]interface{}, map[string]ve.ResponseConvert, error) {
-		return clb, map[string]ve.ResponseConvert{
+func (VestackClbService) WithResourceResponseHandlers(clb map[string]interface{}) []bp.ResourceResponseHandler {
+	handler := func() (map[string]interface{}, map[string]bp.ResponseConvert, error) {
+		return clb, map[string]bp.ResponseConvert{
 			"LoadBalancerBillingType": {
 				TargetField: "load_balancer_billing_type",
 				Convert: func(i interface{}) interface{} {
@@ -261,16 +297,17 @@ func (VestackClbService) WithResourceResponseHandlers(clb map[string]interface{}
 			},
 		}, nil
 	}
-	return []ve.ResourceResponseHandler{handler}
+	return []bp.ResourceResponseHandler{handler}
 
 }
 
-func (s *VestackClbService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []ve.Callback {
-	callback := ve.Callback{
-		Call: ve.SdkCall{
+func (s *VestackClbService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
+	var callbacks []bp.Callback
+	callback := bp.Callback{
+		Call: bp.SdkCall{
 			Action:      "CreateLoadBalancer",
-			ConvertMode: ve.RequestConvertAll,
-			Convert: map[string]ve.RequestConvert{
+			ConvertMode: bp.RequestConvertAll,
+			Convert: map[string]bp.RequestConvert{
 				"load_balancer_billing_type": {
 					TargetField: "LoadBalancerBillingType",
 					Convert: func(data *schema.ResourceData, i interface{}) interface{} {
@@ -291,19 +328,32 @@ func (s *VestackClbService) CreateResource(resourceData *schema.ResourceData, re
 				},
 				"eip_billing_config": {
 					TargetField: "EipBillingConfig",
-					ConvertType: ve.ConvertListUnique,
-					NextLevelConvert: map[string]ve.RequestConvert{
+					ConvertType: bp.ConvertListUnique,
+					NextLevelConvert: map[string]bp.RequestConvert{
 						"isp": {
 							TargetField: "ISP",
+						},
+						"security_protection_types": {
+							TargetField: "SecurityProtectionTypes",
+							ConvertType: bp.ConvertWithN,
 						},
 					},
 				},
 				"tags": {
 					TargetField: "Tags",
-					ConvertType: ve.ConvertListN,
+					ConvertType: bp.ConvertListN,
+				},
+				"renew_type": {
+					Ignore: true,
+				},
+				"renew_period_times": {
+					Ignore: true,
+				},
+				"remain_renew_times": {
+					Ignore: true,
 				},
 			},
-			BeforeCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (bool, error) {
+			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 				if regionId, ok := (*call.SdkParam)["RegionId"]; !ok {
 					(*call.SdkParam)["RegionId"] = s.Client.Region
 				} else if regionId.(string) != s.Client.Region {
@@ -315,6 +365,9 @@ func (s *VestackClbService) CreateResource(resourceData *schema.ResourceData, re
 					delete(*call.SdkParam, "EipBillingConfig.ISP")
 					delete(*call.SdkParam, "EipBillingConfig.EipBillingType")
 					delete(*call.SdkParam, "EipBillingConfig.Bandwidth")
+					delete(*call.SdkParam, "EipBillingConfig.BandwidthPackageId")
+					delete(*call.SdkParam, "EipBillingConfig.SecurityProtectionTypes")
+					delete(*call.SdkParam, "EipBillingConfig.SecurityProtectionInstanceId")
 				}
 				if eipBillingType, exist := (*call.SdkParam)["EipBillingConfig.EipBillingType"]; exist {
 					ty := 0
@@ -335,35 +388,100 @@ func (s *VestackClbService) CreateResource(resourceData *schema.ResourceData, re
 				}
 				return true, nil
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
-				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
 				//创建clb
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
-			AfterCall: func(d *schema.ResourceData, client *ve.SdkClient, resp *map[string]interface{}, call ve.SdkCall) error {
+			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 				//注意 获取内容 这个地方不能是指针 需要转一次
-				id, _ := ve.ObtainSdkValue("Result.LoadBalancerId", *resp)
+				id, _ := bp.ObtainSdkValue("Result.LoadBalancerId", *resp)
 				d.SetId(id.(string))
 				return nil
 			},
-			Refresh: &ve.StateRefresh{
+			Refresh: &bp.StateRefresh{
 				Target:  []string{"Active"},
 				Timeout: resourceData.Timeout(schema.TimeoutCreate),
 			},
 		},
 	}
-	return []ve.Callback{callback}
+	callbacks = append(callbacks, callback)
+
+	// 只有在创建 PrePaid 类型 CLB 且设置了有效的 renew_type 时才需要设置续费类型
+	if billingType, ok := resourceData.GetOk("load_balancer_billing_type"); ok {
+		if billingType.(string) == "PrePaid" {
+			if renewType, ok := resourceData.GetOk("renew_type"); ok && renewType.(string) != "" {
+				renewCallback := s.setLoadBalancerRenewal(resourceData)
+				callbacks = append(callbacks, renewCallback...)
+			}
+		}
+	}
+	return callbacks
 
 }
+func (s *VestackClbService) setLoadBalancerRenewal(resourceData *schema.ResourceData) []bp.Callback {
+	callback := bp.Callback{
+		Call: bp.SdkCall{
+			Action:      "SetLoadBalancerRenewal",
+			ConvertMode: bp.RequestConvertInConvert,
+			Convert: map[string]bp.RequestConvert{
+				"renew_type": {
+					TargetField: "RenewType",
+					ForceGet:    true,
+					Convert: func(data *schema.ResourceData, i interface{}) interface{} {
+						if i == nil {
+							return nil
+						}
+						renewType := i.(string)
+						switch renewType {
+						case "ManualRenew":
+							return 1
+						case "AutoRenew":
+							return 2
+						}
+						return i
+					},
+				},
+				"renew_period_times": {
+					TargetField: "RenewPeriodTimes",
+					ForceGet:    true,
+				},
+				"remain_renew_times": {
+					TargetField: "RemainRenewTimes",
+					ForceGet:    true,
+				},
+			},
+			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+				if len(*call.SdkParam) > 0 {
+					(*call.SdkParam)["LoadBalancerId"] = d.Id()
+					return true, nil
+				}
+				return false, nil
+			},
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
+				resp, err := s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
+				logger.Debug(logger.RespFormat, call.Action, resp, err)
+				return resp, err
+			},
+			Refresh: &bp.StateRefresh{
+				Target:  []string{"Active"},
+				Timeout: resourceData.Timeout(schema.TimeoutUpdate),
+			},
+		},
+	}
+	return []bp.Callback{callback}
+}
 
-func (s *VestackClbService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []ve.Callback {
-	var callbacks []ve.Callback
+func (s *VestackClbService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
+	var callbacks []bp.Callback
 
-	attributesCallback := ve.Callback{
-		Call: ve.SdkCall{
+	// 修改CLB基本属性
+	attributesCallback := bp.Callback{
+		Call: bp.SdkCall{
 			Action:      "ModifyLoadBalancerAttributes",
-			ConvertMode: ve.RequestConvertInConvert,
-			Convert: map[string]ve.RequestConvert{
+			ConvertMode: bp.RequestConvertInConvert,
+			Convert: map[string]bp.RequestConvert{
 				"load_balancer_name": {
 					TargetField: "LoadBalancerName",
 				},
@@ -379,8 +497,21 @@ func (s *VestackClbService) ModifyResource(resourceData *schema.ResourceData, re
 				"load_balancer_spec": {
 					TargetField: "LoadBalancerSpec",
 				},
+				"address_ip_version": {
+					TargetField: "AddressIpVersion",
+				},
+				"eni_ipv6_address": {
+					TargetField: "EniIpv6Address",
+				},
+				"bypass_security_group_enabled": {
+					TargetField: "BypassSecurityGroupEnabled",
+				},
+				"timestamp_remove_enabled": {
+					TargetField: "TimestampRemoveEnabled",
+				},
 			},
-			BeforeCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (bool, error) {
+			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+				// PostPaidByLCU 类型不支持指定规格
 				oldType, _ := d.GetChange("load_balancer_billing_type")
 				if oldType == "PostPaidByLCU" {
 					delete(*call.SdkParam, "LoadBalancerSpec")
@@ -391,12 +522,12 @@ func (s *VestackClbService) ModifyResource(resourceData *schema.ResourceData, re
 				}
 				return false, nil
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				//修改clb属性
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
-			Refresh: &ve.StateRefresh{
+			Refresh: &bp.StateRefresh{
 				Target:  []string{"Active"},
 				Timeout: resourceData.Timeout(schema.TimeoutUpdate),
 			},
@@ -404,12 +535,71 @@ func (s *VestackClbService) ModifyResource(resourceData *schema.ResourceData, re
 	}
 	callbacks = append(callbacks, attributesCallback)
 
+	// 处理计费类型变更
+	// 处理 renew_type 变更
+	if resourceData.HasChanges("renew_type", "renew_period_times", "remain_renew_times") && resourceData.Get("renew_type").(string) != "" {
+		renewalCallback := bp.Callback{
+			Call: bp.SdkCall{
+				Action:      "SetLoadBalancerRenewal",
+				ConvertMode: bp.RequestConvertInConvert,
+				Convert: map[string]bp.RequestConvert{
+					"renew_type": {
+						TargetField: "RenewType",
+						ForceGet:    true,
+						Convert: func(data *schema.ResourceData, i interface{}) interface{} {
+							if i == nil {
+								return nil
+							}
+							renewType := i.(string)
+							switch renewType {
+							case "ManualRenew":
+								return 1
+							case "AutoRenew":
+								return 2
+							}
+							return i
+						},
+					},
+					"renew_period_times": {
+						TargetField: "RenewPeriodTimes",
+						ForceGet:    true,
+					},
+					"remain_renew_times": {
+						TargetField: "RemainRenewTimes",
+						ForceGet:    true,
+					},
+				},
+				BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+					if billType, ok := d.GetOk("load_balancer_billing_type"); ok && billType.(string) != "PrePaid" {
+						return false, fmt.Errorf("renew_type can only be set when load_balancer_billing_type is PrePaid")
+					}
+					if len(*call.SdkParam) > 0 {
+						(*call.SdkParam)["LoadBalancerId"] = d.Id()
+						return true, nil
+					}
+					return false, nil
+				},
+				ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+					logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
+					return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
+				},
+				AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
+					return nil
+				},
+				Refresh: &bp.StateRefresh{
+					Target:  []string{"Active"},
+					Timeout: resourceData.Timeout(schema.TimeoutUpdate),
+				},
+			},
+		}
+		callbacks = append(callbacks, renewalCallback)
+	}
 	if resourceData.HasChange("load_balancer_billing_type") {
-		billingTypeCallback := ve.Callback{
-			Call: ve.SdkCall{
+		billingTypeCallback := bp.Callback{
+			Call: bp.SdkCall{
 				Action:      "ConvertLoadBalancerBillingType",
-				ConvertMode: ve.RequestConvertInConvert,
-				Convert: map[string]ve.RequestConvert{
+				ConvertMode: bp.RequestConvertInConvert,
+				Convert: map[string]bp.RequestConvert{
 					"load_balancer_billing_type": {
 						TargetField: "LoadBalancerBillingType",
 						Convert: func(data *schema.ResourceData, i interface{}) interface{} {
@@ -429,7 +619,7 @@ func (s *VestackClbService) ModifyResource(resourceData *schema.ResourceData, re
 						},
 					},
 				},
-				BeforeCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (bool, error) {
+				BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 					if len(*call.SdkParam) > 0 {
 						(*call.SdkParam)["LoadBalancerId"] = d.Id()
 						oldType, newType := d.GetChange("load_balancer_billing_type")
@@ -446,14 +636,14 @@ func (s *VestackClbService) ModifyResource(resourceData *schema.ResourceData, re
 					}
 					return false, nil
 				},
-				ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
+				ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 					logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 					//修改 clb 计费类型
 					resp, err := s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 					time.Sleep(10 * time.Second)
 					return resp, err
 				},
-				Refresh: &ve.StateRefresh{
+				Refresh: &bp.StateRefresh{
 					Target:  []string{"Active"},
 					Timeout: resourceData.Timeout(schema.TimeoutUpdate),
 				},
@@ -461,11 +651,11 @@ func (s *VestackClbService) ModifyResource(resourceData *schema.ResourceData, re
 		}
 		callbacks = append(callbacks, billingTypeCallback)
 	} else if resourceData.Get("renew_type").(string) == "ManualRenew" && resourceData.HasChange("period") {
-		renewCallback := ve.Callback{
-			Call: ve.SdkCall{
+		renewCallback := bp.Callback{
+			Call: bp.SdkCall{
 				Action:      "RenewLoadBalancer",
-				ConvertMode: ve.RequestConvertInConvert,
-				Convert: map[string]ve.RequestConvert{
+				ConvertMode: bp.RequestConvertInConvert,
+				Convert: map[string]bp.RequestConvert{
 					"period": {
 						TargetField: "Period",
 						Convert: func(data *schema.ResourceData, i interface{}) interface{} {
@@ -474,7 +664,7 @@ func (s *VestackClbService) ModifyResource(resourceData *schema.ResourceData, re
 						},
 					},
 				},
-				BeforeCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (bool, error) {
+				BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 					if len(*call.SdkParam) > 0 {
 						if (*call.SdkParam)["Period"].(int) <= 0 {
 							return false, fmt.Errorf("period can only be enlarged ")
@@ -487,14 +677,14 @@ func (s *VestackClbService) ModifyResource(resourceData *schema.ResourceData, re
 					}
 					return false, nil
 				},
-				ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
+				ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 					logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 					return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 				},
-				AfterCall: func(d *schema.ResourceData, client *ve.SdkClient, resp *map[string]interface{}, call ve.SdkCall) error {
+				AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 					return nil
 				},
-				Refresh: &ve.StateRefresh{
+				Refresh: &bp.StateRefresh{
 					Target:  []string{"Active"},
 					Timeout: resourceData.Timeout(schema.TimeoutUpdate),
 				},
@@ -504,31 +694,31 @@ func (s *VestackClbService) ModifyResource(resourceData *schema.ResourceData, re
 	}
 
 	// 更新Tags
-	setResourceTagsCallbacks := ve.SetResourceTags(s.Client, "TagResources", "UntagResources", "CLB", resourceData, getUniversalInfo)
+	setResourceTagsCallbacks := bp.SetResourceTags(s.Client, "TagResources", "UntagResources", "CLB", resourceData, getUniversalInfo)
 	callbacks = append(callbacks, setResourceTagsCallbacks...)
 
 	return callbacks
 }
 
-func (s *VestackClbService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []ve.Callback {
-	callback := ve.Callback{
-		Call: ve.SdkCall{
+func (s *VestackClbService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []bp.Callback {
+	callback := bp.Callback{
+		Call: bp.SdkCall{
 			Action:      "DeleteLoadBalancer",
-			ConvertMode: ve.RequestConvertIgnore,
+			ConvertMode: bp.RequestConvertIgnore,
 			SdkParam: &map[string]interface{}{
 				"LoadBalancerId": resourceData.Id(),
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				//删除Clb
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
-			CallError: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall, baseErr error) error {
+			CallError: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall, baseErr error) error {
 				//出现错误后重试
 				return resource.Retry(15*time.Minute, func() *resource.RetryError {
 					_, callErr := s.ReadResource(d, "")
 					if callErr != nil {
-						if ve.ResourceNotFoundError(callErr) {
+						if bp.ResourceNotFoundError(callErr) {
 							return nil
 						} else {
 							return resource.NonRetryableError(fmt.Errorf("error on  reading clb on delete %q, %w", d.Id(), callErr))
@@ -543,20 +733,28 @@ func (s *VestackClbService) RemoveResource(resourceData *schema.ResourceData, r 
 			},
 		},
 	}
-	return []ve.Callback{callback}
+	return []bp.Callback{callback}
 }
 
-func (s *VestackClbService) DatasourceResources(*schema.ResourceData, *schema.Resource) ve.DataSourceInfo {
-	return ve.DataSourceInfo{
-		RequestConverts: map[string]ve.RequestConvert{
+func (s *VestackClbService) DatasourceResources(*schema.ResourceData, *schema.Resource) bp.DataSourceInfo {
+	return bp.DataSourceInfo{
+		RequestConverts: map[string]bp.RequestConvert{
 			"ids": {
 				TargetField: "LoadBalancerIds",
-				ConvertType: ve.ConvertWithN,
+				ConvertType: bp.ConvertWithN,
+			},
+			"instance_ids": {
+				TargetField: "InstanceIds",
+				ConvertType: bp.ConvertWithN,
+			},
+			"instance_ips": {
+				TargetField: "InstanceIps",
+				ConvertType: bp.ConvertWithN,
 			},
 			"tags": {
 				TargetField: "TagFilters",
-				ConvertType: ve.ConvertListN,
-				NextLevelConvert: map[string]ve.RequestConvert{
+				ConvertType: bp.ConvertListN,
+				NextLevelConvert: map[string]bp.RequestConvert{
 					"value": {
 						TargetField: "Values.1",
 					},
@@ -566,7 +764,7 @@ func (s *VestackClbService) DatasourceResources(*schema.ResourceData, *schema.Re
 		NameField:    "LoadBalancerName",
 		IdField:      "LoadBalancerId",
 		CollectField: "clbs",
-		ResponseConverts: map[string]ve.ResponseConvert{
+		ResponseConverts: map[string]bp.ResponseConvert{
 			"LoadBalancerId": {
 				TargetField: "id",
 				KeepDefault: true,
@@ -660,18 +858,18 @@ func (s *VestackClbService) ReadResourceId(id string) string {
 	return id
 }
 
-func getUniversalInfo(actionName string) ve.UniversalInfo {
-	return ve.UniversalInfo{
+func getUniversalInfo(actionName string) bp.UniversalInfo {
+	return bp.UniversalInfo{
 		ServiceName: "clb",
 		Version:     "2020-04-01",
-		HttpMethod:  ve.GET,
-		ContentType: ve.Default,
+		HttpMethod:  bp.GET,
+		ContentType: bp.Default,
 		Action:      actionName,
 	}
 }
 
-func (s *VestackClbService) ProjectTrn() *ve.ProjectTrn {
-	return &ve.ProjectTrn{
+func (s *VestackClbService) ProjectTrn() *bp.ProjectTrn {
+	return &bp.ProjectTrn{
 		ServiceName:          "clb",
 		ResourceType:         "clb",
 		ProjectResponseField: "ProjectName",
@@ -679,8 +877,29 @@ func (s *VestackClbService) ProjectTrn() *ve.ProjectTrn {
 	}
 }
 
-func (s *VestackClbService) UnsubscribeInfo(resourceData *schema.ResourceData, resource *schema.Resource) (*ve.UnsubscribeInfo, error) {
-	info := ve.UnsubscribeInfo{
+func removeSystemTags(data []interface{}) ([]interface{}, error) {
+	var (
+		ok      bool
+		result  map[string]interface{}
+		results []interface{}
+		tags    []interface{}
+	)
+	for _, d := range data {
+		if result, ok = d.(map[string]interface{}); !ok {
+			return results, errors.New("The elements in data are not map ")
+		}
+		tags, ok = result["Tags"].([]interface{})
+		if ok {
+			tags = bp.FilterSystemTags(tags)
+			result["Tags"] = tags
+		}
+		results = append(results, result)
+	}
+	return results, nil
+}
+
+func (s *VestackClbService) UnsubscribeInfo(resourceData *schema.ResourceData, resource *schema.Resource) (*bp.UnsubscribeInfo, error) {
+	info := bp.UnsubscribeInfo{
 		InstanceId: s.ReadResourceId(resourceData.Id()),
 	}
 	if resourceData.Get("load_balancer_billing_type") == "PrePaid" {

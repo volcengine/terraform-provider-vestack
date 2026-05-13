@@ -27,61 +27,15 @@ func (s *VestackIamPolicyService) GetClient() *bp.SdkClient {
 
 func (s *VestackIamPolicyService) ReadResources(m map[string]interface{}) (data []interface{}, err error) {
 	var (
-		resp         *map[string]interface{}
-		results      interface{}
-		ok           bool
-		allPolicies  []interface{}
-		userPolicies []interface{}
-		rolePolicies []interface{}
-		temp         interface{}
-		userName     string
-		roleName     string
+		resp    *map[string]interface{}
+		results interface{}
+		ok      bool
 	)
-	if userName, ok = m["UserName"].(string); ok {
-		action := "ListAttachedUserPolicies"
-		param := map[string]interface{}{
-			"UserName": userName,
-		}
-		logger.Debug(logger.ReqFormat, action, param)
-		resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), &param)
-		if err != nil {
-			return data, err
-		}
-		temp, err = bp.ObtainSdkValue("Result.AttachedPolicyMetadata", *resp)
-		if err != nil {
-			return data, err
-		}
-		if temp != nil {
-			if userPolicies, ok = temp.([]interface{}); !ok {
-				return data, fmt.Errorf("%s Response AttachedPolicyMetadata not []interface{}", action)
-			}
-		}
-		delete(m, "UserName")
-	}
+	// remove unsupport params
+	delete(m, "UserName")
+	delete(m, "RoleName")
 
-	if roleName, ok = m["RoleName"].(string); ok {
-		action := "ListAttachedRolePolicies"
-		param := map[string]interface{}{
-			"RoleName": roleName,
-		}
-		logger.Debug(logger.ReqFormat, action, param)
-		resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), &param)
-		if err != nil {
-			return data, err
-		}
-		temp, err = bp.ObtainSdkValue("Result.AttachedPolicyMetadata", *resp)
-		if err != nil {
-			return data, err
-		}
-		if temp != nil {
-			if rolePolicies, ok = temp.([]interface{}); !ok {
-				return data, fmt.Errorf("%s Response AttachedPolicyMetadata not []interface{}", action)
-			}
-		}
-		delete(m, "RoleName")
-	}
-
-	allPolicies, err = bp.WithPageOffsetQuery(m, "Limit", "Offset", 100, 0, func(condition map[string]interface{}) (data []interface{}, err error) {
+	return bp.WithPageOffsetQuery(m, "Limit", "Offset", 100, 0, func(condition map[string]interface{}) (data []interface{}, err error) {
 		action := "ListPolicies"
 		logger.Debug(logger.ReqFormat, action, condition)
 		if condition == nil {
@@ -108,33 +62,11 @@ func (s *VestackIamPolicyService) ReadResources(m map[string]interface{}) (data 
 		}
 		return data, err
 	})
-	if err != nil {
-		return data, err
-	}
-
-	data = allPolicies
-
-	if len(userPolicies) > 0 {
-		data, err = s.MergeAttachedPolicies(userPolicies, data, "UserName", userName, "UserAttachDate")
-		if err != nil {
-			return data, err
-		}
-	}
-
-	if len(rolePolicies) > 0 {
-		data, err = s.MergeAttachedPolicies(rolePolicies, data, "RoleName", roleName, "RoleAttachDate")
-		if err != nil {
-			return data, err
-		}
-	}
-
-	return data, err
 }
 
 func (s *VestackIamPolicyService) ReadResource(resourceData *schema.ResourceData, policyId string) (data map[string]interface{}, err error) {
 	var (
 		results []interface{}
-		ok      bool
 	)
 	if policyId == "" {
 		policyId = s.ReadResourceId(resourceData.Id())
@@ -147,8 +79,13 @@ func (s *VestackIamPolicyService) ReadResource(resourceData *schema.ResourceData
 		return data, err
 	}
 	for _, v := range results {
-		if data, ok = v.(map[string]interface{}); !ok {
+		if temp, ok := v.(map[string]interface{}); !ok {
 			return data, errors.New("value is not map")
+		} else {
+			if pName, ok := temp["PolicyName"].(string); ok && pName == policyId {
+				data = temp
+				break
+			}
 		}
 	}
 	if len(data) == 0 {
@@ -183,7 +120,9 @@ func (s *VestackIamPolicyService) CreateResource(data *schema.ResourceData, reso
 				if err != nil {
 					return err
 				}
-				d.SetId(policyName.(string))
+				if nameStr, ok := policyName.(string); ok && nameStr != "" {
+					d.SetId(nameStr)
+				}
 				return nil
 			},
 		},
@@ -221,7 +160,9 @@ func (s *VestackIamPolicyService) ModifyResource(data *schema.ResourceData, reso
 					if err != nil {
 						return err
 					}
-					d.SetId(policyName.(string))
+					if nameStr, ok := policyName.(string); ok && nameStr != "" {
+						d.SetId(nameStr)
+					}
 				}
 				return nil
 			},
@@ -268,10 +209,27 @@ func (s *VestackIamPolicyService) RemoveResource(data *schema.ResourceData, r *s
 
 func (s *VestackIamPolicyService) DatasourceResources(data *schema.ResourceData, resource *schema.Resource) bp.DataSourceInfo {
 	return bp.DataSourceInfo{
+		RequestConverts: map[string]bp.RequestConvert{
+			"with_service_role_policy": {
+				TargetField: "WithServiceRolePolicy",
+			},
+			"scope": {
+				TargetField: "Scope",
+			},
+		},
 		ResponseConverts: map[string]bp.ResponseConvert{
 			"PolicyName": {
 				TargetField: "id",
 				KeepDefault: true,
+			},
+			"Category": {
+				TargetField: "category",
+			},
+			"AttachmentCount": {
+				TargetField: "attachment_count",
+			},
+			"IsServiceRolePolicy": {
+				TargetField: "is_service_role_policy",
 			},
 		},
 		NameField:    "PolicyName",
@@ -284,43 +242,13 @@ func (s *VestackIamPolicyService) ReadResourceId(id string) string {
 	return id
 }
 
-func (s *VestackIamPolicyService) MergeAttachedPolicies(attached []interface{}, source []interface{}, k, v, attachKey string) (data []interface{}, err error) {
-	var (
-		temp interface{}
-	)
-	for _, p0 := range attached {
-		temp, err = bp.ObtainSdkValue("PolicyName", p0)
-		if err != nil {
-			return data, err
-		}
-		p0PolicyName := temp.(string)
-		temp, err = bp.ObtainSdkValue("AttachDate", p0)
-		if err != nil {
-			return data, err
-		}
-		attachDate := temp.(string)
-		for _, p1 := range source {
-			temp, err = bp.ObtainSdkValue("PolicyName", p0)
-			if err != nil {
-				return data, err
-			}
-			p1PolicyName := temp.(string)
-			if p0PolicyName == p1PolicyName {
-				p1.(map[string]interface{})[attachKey] = attachDate
-				p1.(map[string]interface{})[k] = v
-				data = append(data, p1)
-				break
-			}
-		}
-	}
-	return data, err
-}
-
 func getUniversalInfo(actionName string) bp.UniversalInfo {
 	return bp.UniversalInfo{
 		ServiceName: "iam",
+		Action:      actionName,
 		Version:     "2018-01-01",
 		HttpMethod:  bp.GET,
-		Action:      actionName,
+		ContentType: bp.Default,
+		RegionType:  bp.Global,
 	}
 }

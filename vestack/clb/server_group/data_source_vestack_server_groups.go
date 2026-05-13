@@ -3,7 +3,7 @@ package server_group
 import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 func DataSourceVestackServerGroups() *schema.Resource {
@@ -47,6 +47,14 @@ func DataSourceVestackServerGroups() *schema.Resource {
 				Optional:    true,
 				Description: "The name of the ServerGroup.",
 			},
+			"type": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				ValidateFunc: validation.StringInSlice([]string{"instance", "ip"}, false),
+				Description:  "The type of ServerGroup. Valid values: `instance`, `ip`.",
+			},
+			"tags": bp.TagsSchema(),
+
 			"groups": {
 				Description: "The collection of ServerGroup query.",
 				Type:        schema.TypeList,
@@ -83,10 +91,35 @@ func DataSourceVestackServerGroups() *schema.Resource {
 							Computed:    true,
 							Description: "The description of the ServerGroup.",
 						},
+						"type": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "The type of the ServerGroup.",
+						},
 						"address_ip_version": {
 							Type:        schema.TypeString,
 							Computed:    true,
-							Description: "The address ip version of the ServerGroup.",
+							Description: "The address IP version of the ServerGroup.",
+						},
+						"any_port_enabled": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "Whether full port forwarding is enabled.",
+						},
+						"tags": bp.TagsSchemaComputed(),
+						// DescribeServerGroupAttributes 详情API返回
+						"load_balancer_id": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "The ID of the LoadBalancer.",
+						},
+						"listeners": {
+							Type:        schema.TypeList,
+							Computed:    true,
+							Description: "The listeners of the ServerGroup.",
+							Elem: &schema.Schema{
+								Type: schema.TypeString,
+							},
 						},
 					},
 				},
@@ -96,6 +129,6 @@ func DataSourceVestackServerGroups() *schema.Resource {
 }
 
 func dataSourceVestackServerGroupsRead(d *schema.ResourceData, meta interface{}) error {
-	serverGroupService := NewServerGroupService(meta.(*ve.SdkClient))
-	return ve.DefaultDispatcher().Data(serverGroupService, d, DataSourceVestackServerGroups())
+	serverGroupService := NewServerGroupService(meta.(*bp.SdkClient))
+	return bp.DefaultDispatcher().Data(serverGroupService, d, DataSourceVestackServerGroups())
 }

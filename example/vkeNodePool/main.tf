@@ -19,12 +19,13 @@ resource "vestack_security_group" "foo" {
 }
 
 data "vestack_images" "foo" {
-  name_regex = "veLinux 1.0 CentOS兼容版 64位"
+  name_regex = "veLinux 1.0 CentOS Compatible 64 bit"
 }
 
 resource "vestack_vke_cluster" "foo" {
   name                      = "acc-test-cluster"
   description               = "created by terraform"
+  project_name              = "default"
   delete_protection_enabled = false
   cluster_config {
     subnet_ids                       = [vestack_subnet.foo.id]
@@ -66,19 +67,19 @@ resource "vestack_vke_node_pool" "foo" {
   node_config {
     instance_type_ids = ["ecs.g1ie.xlarge"]
     subnet_ids        = [vestack_subnet.foo.id]
-    image_id          = [for image in data.vestack_images.foo.images : image.image_id if image.image_name == "veLinux 1.0 CentOS兼容版 64位"][0]
+    image_id          = [for image in data.vestack_images.foo.images : image.image_id if image.image_name == "veLinux 1.0 CentOS Compatible 64 bit"][0]
     system_volume {
       type = "ESSD_PL0"
-      size = "60"
+      size = 80
     }
     data_volumes {
       type        = "ESSD_PL0"
-      size        = "60"
+      size        = 80
       mount_point = "/tf1"
     }
     data_volumes {
       type        = "ESSD_PL0"
-      size        = "60"
+      size        = 60
       mount_point = "/tf2"
     }
     initialize_script = "ZWNobyBoZWxsbyB0ZXJyYWZvcm0h"
@@ -89,7 +90,89 @@ resource "vestack_vke_node_pool" "foo" {
       security_strategies = ["Hids"]
       security_group_ids  = [vestack_security_group.foo.id]
     }
-    additional_container_storage_enabled = true
+    additional_container_storage_enabled = false
+    instance_charge_type                 = "PostPaid"
+    name_prefix                          = "acc-test"
+    project_name                         = "default"
+    ecs_tags {
+      key   = "ecs_k1"
+      value = "ecs_v1"
+    }
+  }
+  kubernetes_config {
+    labels {
+      key   = "label1"
+      value = "value1"
+    }
+    taints {
+      key    = "taint-key/node-type"
+      value  = "taint-value"
+      effect = "NoSchedule"
+    }
+    cordon             = true
+    auto_sync_disabled = false
+  }
+  tags {
+    key   = "node-pool-k1"
+    value = "node-pool-v1"
+  }
+}
+
+# add existing instances to a custom node pool
+resource "vestack_ecs_instance" "foo" {
+  instance_name        = "acc-test-ecs-${count.index}"
+  host_name            = "tf-acc-test"
+  image_id             = [for image in data.vestack_images.foo.images : image.image_id if image.image_name == "veLinux 1.0 CentOS Compatible 64 bit"][0]
+  instance_type        = "ecs.g1ie.xlarge"
+  password             = "93f0cb0614Aab12"
+  instance_charge_type = "PostPaid"
+  system_volume_type   = "ESSD_PL0"
+  system_volume_size   = 50
+  data_volumes {
+    volume_type          = "ESSD_PL0"
+    size                 = 50
+    delete_with_instance = true
+  }
+  subnet_id          = vestack_subnet.foo.id
+  security_group_ids = [vestack_security_group.foo.id]
+  project_name       = "default"
+  tags {
+    key   = "k1"
+    value = "v1"
+  }
+  lifecycle {
+    ignore_changes = [security_group_ids, tags]
+  }
+  count = 2
+}
+
+resource "vestack_vke_node_pool" "foo1" {
+  cluster_id         = vestack_vke_cluster.foo.id
+  name               = "acc-test-node-pool"
+  instance_ids       = vestack_ecs_instance.foo[*].id
+  keep_instance_name = true
+  node_config {
+    instance_type_ids = ["ecs.g1ie.xlarge"]
+    subnet_ids        = [vestack_subnet.foo.id]
+    image_id          = [for image in data.vestack_images.foo.images : image.image_id if image.image_name == "veLinux 1.0 CentOS Compatible 64 bit"][0]
+    system_volume {
+      type = "ESSD_PL0"
+      size = 50
+    }
+    data_volumes {
+      type        = "ESSD_PL0"
+      size        = 50
+      mount_point = "/tf1"
+    }
+    initialize_script = "ZWNobyBoZWxsbyB0ZXJyYWZvcm0h"
+    security {
+      login {
+        password = "UHdkMTIzNDU2"
+      }
+      security_strategies = ["Hids"]
+      security_group_ids  = [vestack_security_group.foo.id]
+    }
+    additional_container_storage_enabled = false
     instance_charge_type                 = "PostPaid"
     name_prefix                          = "acc-test"
     ecs_tags {

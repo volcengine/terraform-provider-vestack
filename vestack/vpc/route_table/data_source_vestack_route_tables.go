@@ -32,6 +32,7 @@ func DataSourceVestackRouteTables() *schema.Resource {
 				Optional:    true,
 				Description: "The ProjectName of the route table.",
 			},
+			"tags": bp.TagsSchema(),
 
 			"output_file": {
 				Type:        schema.TypeString,
@@ -112,6 +113,7 @@ func DataSourceVestackRouteTables() *schema.Resource {
 							Computed:    true,
 							Description: "The ProjectName of the route table.",
 						},
+						"tags": bp.TagsSchemaComputed(),
 					},
 				},
 			},

@@ -3,7 +3,7 @@ package server_group_server
 import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 func DataSourceVestackServerGroupServers() *schema.Resource {
@@ -65,7 +65,7 @@ func DataSourceVestackServerGroupServers() *schema.Resource {
 						"type": {
 							Type:        schema.TypeString,
 							Computed:    true,
-							Description: "The type of instance. Optional choice contains `ecs`, `eni`.",
+							Description: "The type of instance. Optional choice contains `ecs`, `eni`, `ip`.",
 						},
 						"weight": {
 							Type:        schema.TypeInt,
@@ -77,10 +77,15 @@ func DataSourceVestackServerGroupServers() *schema.Resource {
 							Computed:    true,
 							Description: "The private ip of the instance.",
 						},
+						"any_port_enabled": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "Whether full port forwarding is enabled. Values: `on`, `off`.",
+						},
 						"port": {
 							Type:        schema.TypeInt,
 							Computed:    true,
-							Description: "The port receiving request.",
+							Description: "The port receiving request. Return empty when `any_port_enabled` is `on`.",
 						},
 						"description": {
 							Type:        schema.TypeString,
@@ -95,6 +100,6 @@ func DataSourceVestackServerGroupServers() *schema.Resource {
 }
 
 func dataSourceVestackServerGroupServersRead(d *schema.ResourceData, meta interface{}) error {
-	serverGroupServerService := NewServerGroupServerService(meta.(*ve.SdkClient))
-	return ve.DefaultDispatcher().Data(serverGroupServerService, d, DataSourceVestackServerGroupServers())
+	serverGroupServerService := NewServerGroupServerService(meta.(*bp.SdkClient))
+	return bp.DefaultDispatcher().Data(serverGroupServerService, d, DataSourceVestackServerGroupServers())
 }

@@ -163,7 +163,7 @@ func FilterSystemTags(tags []interface{}) []interface{} {
 }
 
 func tagIgnored(tagKey string, tagValue interface{}) bool {
-	filter := []string{"^volc:"}
+	filter := []string{"^volc:", "^sys:"}
 	for _, v := range filter {
 		ok, _ := regexp.MatchString(v, tagKey)
 		if ok {
@@ -171,4 +171,63 @@ func tagIgnored(tagKey string, tagValue interface{}) bool {
 		}
 	}
 	return false
+}
+
+func TransTagsToResponse(i interface{}) interface{} {
+	if i == nil {
+		return nil
+	}
+	// Filter system tags first using the original common method which expects capitalized Key/Value
+	list, ok := i.([]interface{})
+	if !ok {
+		return nil
+	}
+	filtered := FilterSystemTags(list)
+
+	var tags []interface{}
+	for _, v := range filtered {
+		if m, ok := v.(map[string]interface{}); ok {
+			tag := make(map[string]interface{})
+			if key, ok := m["Key"].(string); ok {
+				tag["key"] = key
+			}
+			if value, ok := m["Value"].(string); ok {
+				tag["value"] = value
+			}
+			tags = append(tags, tag)
+		}
+	}
+	return tags
+}
+
+func TransTagFiltersToRequest(d *schema.ResourceData, i interface{}) interface{} {
+	if i == nil {
+		return nil
+	}
+	var list []interface{}
+	switch v := i.(type) {
+	case *schema.Set:
+		if v.Len() == 0 {
+			return nil
+		}
+		list = v.List()
+	case []interface{}:
+		list = v
+	default:
+		return nil
+	}
+	var filters []map[string]interface{}
+	for _, v := range list {
+		if m, ok := v.(map[string]interface{}); ok {
+			filter := make(map[string]interface{})
+			if key, ok := m["key"].(string); ok {
+				filter["Key"] = key
+			}
+			if value, ok := m["value"].(string); ok {
+				filter["Value"] = value
+			}
+			filters = append(filters, filter)
+		}
+	}
+	return filters
 }

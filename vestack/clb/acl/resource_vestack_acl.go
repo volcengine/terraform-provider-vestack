@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 )
 
 /*
@@ -49,7 +49,7 @@ func ResourceVestackAcl() *schema.Resource {
 				Optional:    true,
 				Computed:    true,
 				Description: "The acl entry set of the Acl.",
-				Set:         ve.ClbAclEntryHash,
+				Set:         bp.ClbAclEntryHash,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
 						"description": {
@@ -71,6 +71,7 @@ func ResourceVestackAcl() *schema.Resource {
 				Computed:    true,
 				Description: "The ProjectName of the Acl.",
 			},
+			"tags": bp.TagsSchema(),
 			"create_time": {
 				Type:        schema.TypeString,
 				Computed:    true,
@@ -81,8 +82,8 @@ func ResourceVestackAcl() *schema.Resource {
 }
 
 func resourceVestackAclCreate(d *schema.ResourceData, meta interface{}) (err error) {
-	aclService := NewAclService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Create(aclService, d, ResourceVestackAcl())
+	aclService := NewAclService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Create(aclService, d, ResourceVestackAcl())
 	if err != nil {
 		return fmt.Errorf("error on creating acl %q, %w", d.Id(), err)
 	}
@@ -90,8 +91,8 @@ func resourceVestackAclCreate(d *schema.ResourceData, meta interface{}) (err err
 }
 
 func resourceVestackAclRead(d *schema.ResourceData, meta interface{}) (err error) {
-	aclService := NewAclService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Read(aclService, d, ResourceVestackAcl())
+	aclService := NewAclService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Read(aclService, d, ResourceVestackAcl())
 	if err != nil {
 		return fmt.Errorf("error on reading acl %q, %w", d.Id(), err)
 	}
@@ -99,8 +100,8 @@ func resourceVestackAclRead(d *schema.ResourceData, meta interface{}) (err error
 }
 
 func resourceVestackAclUpdate(d *schema.ResourceData, meta interface{}) (err error) {
-	aclService := NewAclService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Update(aclService, d, ResourceVestackAcl())
+	aclService := NewAclService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Update(aclService, d, ResourceVestackAcl())
 	if err != nil {
 		return fmt.Errorf("error on updating acl %q, %w", d.Id(), err)
 	}
@@ -108,8 +109,8 @@ func resourceVestackAclUpdate(d *schema.ResourceData, meta interface{}) (err err
 }
 
 func resourceVestackAclDelete(d *schema.ResourceData, meta interface{}) (err error) {
-	aclService := NewAclService(meta.(*ve.SdkClient))
-	err = ve.DefaultDispatcher().Delete(aclService, d, ResourceVestackAcl())
+	aclService := NewAclService(meta.(*bp.SdkClient))
+	err = bp.DefaultDispatcher().Delete(aclService, d, ResourceVestackAcl())
 	if err != nil {
 		return fmt.Errorf("error on deleting acl %q, %w", d.Id(), err)
 	}

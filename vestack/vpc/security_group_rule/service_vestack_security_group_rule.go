@@ -70,9 +70,9 @@ func (s *VestackSecurityGroupRuleService) CreateResource(resourceData *schema.Re
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				if direction == string(DirectionEgress) {
-					return s.Client.VpcClient.AuthorizeSecurityGroupEgressCommon(call.SdkParam)
+					return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 				} else {
-					return s.Client.VpcClient.AuthorizeSecurityGroupIngressCommon(call.SdkParam)
+					return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 				}
 			},
 			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
@@ -106,16 +106,15 @@ func (s *VestackSecurityGroupRuleService) ReadResources(condition map[string]int
 		ok      bool
 	)
 
-	vpcClient := s.Client.VpcClient
 	action := "DescribeSecurityGroupAttributes"
 	logger.Debug(logger.ReqFormat, action, condition)
 	if condition == nil {
-		resp, err = vpcClient.DescribeSecurityGroupAttributesCommon(nil)
+		resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), nil)
 		if err != nil {
 			return data, err
 		}
 	} else {
-		resp, err = vpcClient.DescribeSecurityGroupAttributesCommon(&condition)
+		resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), &condition)
 		if err != nil {
 			return data, err
 		}
@@ -223,8 +222,9 @@ func (s *VestackSecurityGroupRuleService) ModifyResource(resourceData *schema.Re
 				},
 			},
 			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+				var cidrIp string
 				items := strings.Split(d.Id(), ":")
-
+				itemsLength := len(items)
 				start, _ := strconv.Atoi(items[2])
 				end, _ := strconv.Atoi(items[3])
 
@@ -232,13 +232,24 @@ func (s *VestackSecurityGroupRuleService) ModifyResource(resourceData *schema.Re
 				(*call.SdkParam)["Protocol"] = items[1]
 				(*call.SdkParam)["PortStart"] = start
 				(*call.SdkParam)["PortEnd"] = end
-				if len(items[4]) > 0 {
-					(*call.SdkParam)["CidrIp"] = items[4]
+				if itemsLength == 9 {
+					// ipv4
+					cidrIp = items[4]
+				} else {
+					// ipv6
+					strArr := make([]string, 0)
+					for i := 4; i < itemsLength-4; i++ {
+						strArr = append(strArr, items[i])
+					}
+					cidrIp = strings.Join(strArr, ":")
 				}
-				if len(items[5]) > 0 {
-					(*call.SdkParam)["SourceGroupId"] = items[5]
+				if len(cidrIp) > 0 {
+					(*call.SdkParam)["CidrIp"] = cidrIp
 				}
-				(*call.SdkParam)["Policy"] = items[7]
+				if len(items[itemsLength-4]) > 0 {
+					(*call.SdkParam)["SourceGroupId"] = items[itemsLength-4]
+				}
+				(*call.SdkParam)["Policy"] = items[itemsLength-2]
 				(*call.SdkParam)["Priority"] = resourceData.Get("priority")
 
 				// validate protocol
@@ -250,9 +261,9 @@ func (s *VestackSecurityGroupRuleService) ModifyResource(resourceData *schema.Re
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				if direction == string(DirectionEgress) {
-					return s.Client.VpcClient.ModifySecurityGroupRuleDescriptionsEgressCommon(call.SdkParam)
+					return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 				} else {
-					return s.Client.VpcClient.ModifySecurityGroupRuleDescriptionsIngressCommon(call.SdkParam)
+					return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 				}
 
 			},
@@ -292,9 +303,9 @@ func (s *VestackSecurityGroupRuleService) RemoveResource(resourceData *schema.Re
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				if direction == string(DirectionEgress) {
-					return s.Client.VpcClient.RevokeSecurityGroupEgressCommon(call.SdkParam)
+					return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 				} else {
-					return s.Client.VpcClient.RevokeSecurityGroupIngressCommon(call.SdkParam)
+					return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 				}
 
 			},
@@ -341,4 +352,14 @@ func validateProtocol(protocol string, start, end int) error {
 		}
 	}
 	return nil
+}
+
+func getUniversalInfo(actionName string) bp.UniversalInfo {
+	return bp.UniversalInfo{
+		ServiceName: "vpc",
+		Version:     "2020-04-01",
+		HttpMethod:  bp.GET,
+		ContentType: bp.Default,
+		Action:      actionName,
+	}
 }

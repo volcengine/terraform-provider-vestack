@@ -35,16 +35,15 @@ func (s *VestackVolumeService) ReadResources(condition map[string]interface{}) (
 		ok      bool
 	)
 	return bp.WithPageNumberQuery(condition, "PageSize", "PageNumber", 20, 1, func(m map[string]interface{}) ([]interface{}, error) {
-		ebs := s.Client.EbsClient
 		action := "DescribeVolumes"
 		logger.Debug(logger.ReqFormat, action, condition)
 		if condition == nil {
-			resp, err = ebs.DescribeVolumesCommon(nil)
+			resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), nil)
 			if err != nil {
 				return data, err
 			}
 		} else {
-			resp, err = ebs.DescribeVolumesCommon(&condition)
+			resp, err = s.Client.UniversalClient.DoCall(getUniversalInfo(action), &condition)
 			if err != nil {
 				return data, err
 			}
@@ -94,6 +93,16 @@ func (s *VestackVolumeService) ReadResource(resourceData *schema.ResourceData, v
 		data["VolumeChargeType"] = "PostPaid"
 	} else if payType.(string) == "pre" {
 		data["VolumeChargeType"] = "PrePaid"
+	}
+
+	if extraPerformance, exist := data["ExtraPerformance"]; exist {
+		extraPerformanceMap, ok := extraPerformance.(map[string]interface{})
+		if !ok {
+			return data, fmt.Errorf("The ExtraPerformance of volume is not map ")
+		}
+		data["ExtraPerformanceTypeId"] = extraPerformanceMap["ExtraPerformanceTypeId"]
+		data["ExtraPerformanceIops"] = extraPerformanceMap["IOPS"]
+		data["ExtraPerformanceThroughputMb"] = extraPerformanceMap["Throughput"]
 	}
 
 	return data, err
@@ -155,13 +164,26 @@ func (VestackVolumeService) WithResourceResponseHandlers(volume map[string]inter
 }
 
 func (s *VestackVolumeService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
+	var callbacks []bp.Callback
 	callback := bp.Callback{
 		Call: bp.SdkCall{
 			Action:      "CreateVolume",
 			ConvertMode: bp.RequestConvertAll,
+			Convert: map[string]bp.RequestConvert{
+				"tags": {
+					TargetField: "Tags",
+					ConvertType: bp.ConvertListN,
+				},
+				"extra_performance_iops": {
+					TargetField: "ExtraPerformanceIOPS",
+				},
+				"extra_performance_throughput_mb": {
+					TargetField: "ExtraPerformanceThroughputMB",
+				},
+			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
-				return s.Client.EbsClient.CreateVolumeCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
 			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
 				id, _ := bp.ObtainSdkValue("Result.VolumeId", *resp)
@@ -174,7 +196,38 @@ func (s *VestackVolumeService) CreateResource(resourceData *schema.ResourceData,
 			},
 		},
 	}
-	return []bp.Callback{callback}
+	callbacks = append(callbacks, callback)
+
+	if resourceData.Get("delete_with_instance").(bool) {
+		callbacks = append(callbacks, bp.Callback{
+			Call: bp.SdkCall{
+				Action:      "ModifyVolumeAttribute",
+				ConvertMode: bp.RequestConvertInConvert,
+				Convert: map[string]bp.RequestConvert{
+					"delete_with_instance": {
+						TargetField: "DeleteWithInstance",
+					},
+				},
+				BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+					(*call.SdkParam)["VolumeId"] = d.Id()
+					delete(*call.SdkParam, "Tags")
+					return true, nil
+				},
+				ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+					logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
+					resp, err := s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
+					logger.Debug(logger.RespFormat, call.Action, resp, err)
+					return resp, err
+				},
+				Refresh: &bp.StateRefresh{
+					Target:  []string{"available", "attached"},
+					Timeout: resourceData.Timeout(schema.TimeoutUpdate),
+				},
+			},
+		})
+	}
+
+	return callbacks
 }
 
 func (s *VestackVolumeService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
@@ -198,11 +251,12 @@ func (s *VestackVolumeService) ModifyResource(resourceData *schema.ResourceData,
 				},
 				BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 					(*call.SdkParam)["VolumeId"] = d.Id()
+					delete(*call.SdkParam, "Tags")
 					return true, nil
 				},
 				ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 					logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
-					return s.Client.EbsClient.ModifyVolumeAttributeCommon(call.SdkParam)
+					return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 				},
 				Refresh: &bp.StateRefresh{
 					Target:  []string{"available", "attached"},
@@ -224,7 +278,7 @@ func (s *VestackVolumeService) ModifyResource(resourceData *schema.ResourceData,
 				},
 				ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 					logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
-					return s.Client.EbsClient.ExtendVolumeCommon(call.SdkParam)
+					return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 				},
 				Refresh: &bp.StateRefresh{
 					Target:  []string{"available", "attached"},
@@ -240,18 +294,17 @@ func (s *VestackVolumeService) ModifyResource(resourceData *schema.ResourceData,
 				Action:      "ModifyVolumeChargeType",
 				ConvertMode: bp.RequestConvertIgnore,
 				BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
-					oldV, newV := resourceData.GetChange("volume_charge_type")
-					if oldV == "PrePaid" && newV == "PostPaid" {
-						return false, errors.New("cannot convert PrePaid volume to PostPaid")
-					}
 					if d.Get("instance_id").(string) == "" {
 						return false, errors.New("instance id cannot be empty")
 					}
 
+					chargeType := resourceData.Get("volume_charge_type")
 					(*call.SdkParam)["VolumeIds.1"] = d.Id()
-					(*call.SdkParam)["DiskChargeType"] = "PrePaid"
-					(*call.SdkParam)["AutoPay"] = true
+					(*call.SdkParam)["DiskChargeType"] = chargeType
 					(*call.SdkParam)["InstanceId"] = d.Get("instance_id")
+					if chargeType == "PrePaid" {
+						(*call.SdkParam)["AutoPay"] = true
+					}
 					return true, nil
 				},
 				ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
@@ -262,10 +315,7 @@ func (s *VestackVolumeService) ModifyResource(resourceData *schema.ResourceData,
 					return resp, err
 				},
 				CallError: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall, baseErr error) error {
-					oldV, newV := resourceData.GetChange("volume_charge_type")
-					if oldV == "PrePaid" && newV == "PostPaid" {
-						return errors.New("cannot convert PrePaid volume to PostPaid")
-					}
+					chargeType := resourceData.Get("volume_charge_type")
 					if d.Get("instance_id").(string) == "" {
 						return errors.New("instance id cannot be empty")
 					}
@@ -276,7 +326,7 @@ func (s *VestackVolumeService) ModifyResource(resourceData *schema.ResourceData,
 							return re.NonRetryableError(fmt.Errorf("error on reading volume %q: %w", d.Id(), callErr))
 						}
 						// 计费方式已经转变成功
-						if data["PayType"] == "pre" {
+						if (chargeType == "PrePaid" && data["PayType"] == "pre") || (chargeType == "PostPaid" && data["PayType"] == "post") {
 							return nil
 						}
 						// 计费方式还没有转换成功，尝试重新转换
@@ -294,6 +344,67 @@ func (s *VestackVolumeService) ModifyResource(resourceData *schema.ResourceData,
 			},
 		})
 	}
+
+	if resourceData.HasChange("volume_type") {
+		callbacks = append(callbacks, bp.Callback{
+			Call: bp.SdkCall{
+				Action:      "ModifyVolumeSpec",
+				ConvertMode: bp.RequestConvertIgnore,
+				BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+					(*call.SdkParam)["VolumeId"] = d.Id()
+					(*call.SdkParam)["TargetVolumeType"] = d.Get("volume_type")
+					return true, nil
+				},
+				ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+					logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
+					resp, err := s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
+					logger.Debug(logger.RespFormat, call.Action, resp)
+					return resp, err
+				},
+				Refresh: &bp.StateRefresh{
+					Target:  []string{"available", "attached"},
+					Timeout: resourceData.Timeout(schema.TimeoutUpdate),
+				},
+			},
+		})
+	}
+
+	if resourceData.HasChanges("extra_performance_type_id", "extra_performance_iops", "extra_performance_throughput_mb") {
+		callbacks = append(callbacks, bp.Callback{
+			Call: bp.SdkCall{
+				Action:      "ModifyVolumeExtraPerformance",
+				ConvertMode: bp.RequestConvertInConvert,
+				Convert: map[string]bp.RequestConvert{
+					"extra_performance_iops": {
+						TargetField: "ExtraPerformanceIOPS",
+					},
+					"extra_performance_throughput_mb": {
+						TargetField: "ExtraPerformanceThroughputMB",
+					},
+				},
+				BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+					(*call.SdkParam)["VolumeId"] = d.Id()
+					(*call.SdkParam)["ExtraPerformanceTypeId"] = d.Get("extra_performance_type_id")
+					return true, nil
+				},
+				ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+					logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
+					resp, err := s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
+					logger.Debug(logger.RespFormat, call.Action, resp)
+					return resp, err
+				},
+				Refresh: &bp.StateRefresh{
+					Target:  []string{"available", "attached"},
+					Timeout: resourceData.Timeout(schema.TimeoutUpdate),
+				},
+			},
+		})
+	}
+
+	// 更新Tags
+	setResourceTagsCallbacks := bp.SetResourceTags(s.Client, "CreateTags", "DeleteTags", "volume", resourceData, getUniversalInfo)
+	callbacks = append(callbacks, setResourceTagsCallbacks...)
+
 	return callbacks
 }
 
@@ -310,6 +421,21 @@ func (s *VestackVolumeService) RemoveResource(resourceData *schema.ResourceData,
 				if err != nil {
 					return false, err
 				}
+
+				// 包年包月云盘和随实例删除云盘，直接移除管理
+				chargeType, err := bp.ObtainSdkValue("VolumeChargeType", volume)
+				if err != nil {
+					return false, err
+				}
+				deleteWithInstance, err := bp.ObtainSdkValue("DeleteWithInstance", volume)
+				if err != nil {
+					return false, err
+				}
+				if chargeType == "PrePaid" && deleteWithInstance.(bool) {
+					logger.DebugInfo("The Resource vestack_volume %s ChargeType is PrePaid and its attribute DeleteWithInstance is true, so it will remove from state.", d.Id())
+					return false, nil
+				}
+
 				status, err := bp.ObtainSdkValue("Status", volume)
 				if err != nil {
 					return false, err
@@ -321,7 +447,7 @@ func (s *VestackVolumeService) RemoveResource(resourceData *schema.ResourceData,
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
-				return s.Client.EbsClient.DeleteVolumeCommon(call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
 			CallError: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall, baseErr error) error {
 				// 不能删除已挂载云盘
@@ -359,6 +485,15 @@ func (s *VestackVolumeService) DatasourceResources(*schema.ResourceData, *schema
 				TargetField: "VolumeIds",
 				ConvertType: bp.ConvertWithN,
 			},
+			"tags": {
+				TargetField: "TagFilters",
+				ConvertType: bp.ConvertListN,
+				NextLevelConvert: map[string]bp.RequestConvert{
+					"value": {
+						TargetField: "Values.1",
+					},
+				},
+			},
 		},
 		NameField:    "VolumeName",
 		IdField:      "VolumeId",
@@ -371,6 +506,9 @@ func (s *VestackVolumeService) DatasourceResources(*schema.ResourceData, *schema
 			"Size": {
 				TargetField: "size",
 				Convert:     sizeConvertFunc,
+			},
+			"IOPS": {
+				TargetField: "iops",
 			},
 		},
 	}

@@ -1,7 +1,6 @@
 package default_node_pool
 
 import (
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -50,13 +49,6 @@ func (s *VestackDefaultNodePoolService) ReadResource(resourceData *schema.Resour
 	if nodePoolId == "" {
 		nodePoolId = s.ReadResourceId(resourceData.Id())
 	}
-	clusterId := ""
-	if c, ok := resourceData.Get("cluster_id").(string); ok {
-		clusterId = c
-	} else {
-		err = errors.New("cluster_id is empty")
-		return nil, err
-	}
 	data, err = s.nodePoolService.ReadResource(resourceData, nodePoolId)
 	if err != nil {
 		return data, err
@@ -73,7 +65,6 @@ func (s *VestackDefaultNodePoolService) ReadResource(resourceData *schema.Resour
 	nodes, err = s.nodeService.ReadResources(map[string]interface{}{
 		"Filter": map[string]interface{}{
 			"NodePoolIds": []string{nodePoolId},
-			"ClusterIds":  []string{clusterId},
 		},
 	})
 	if err != nil {
@@ -130,13 +121,6 @@ func (s *VestackDefaultNodePoolService) RefreshResourceState(resourceData *schem
 			)
 			instanceMap := make(map[string]bool)
 			instances := resourceData.Get("instances").(*schema.Set)
-			clusterId := ""
-			if c, ok := resourceData.Get("cluster_id").(string); ok {
-				clusterId = c
-			} else {
-				err = errors.New("cluster_id is empty")
-				return nil, "", err
-			}
 			for _, ins := range instances.List() {
 				instancesId, _ := bp.ObtainSdkValue("instance_id", ins)
 				instanceMap[instancesId.(string)] = true
@@ -147,10 +131,10 @@ func (s *VestackDefaultNodePoolService) RefreshResourceState(resourceData *schem
 				"Failed+Unknown",
 				"Failed+ResourceCleanupFailed",
 			}
+
 			nodes, err = s.nodeService.ReadResources(map[string]interface{}{
 				"Filter": map[string]interface{}{
 					"NodePoolIds": []string{id},
-					"ClusterIds":  []string{clusterId},
 				},
 			})
 			if err != nil {
@@ -243,6 +227,9 @@ func (s *VestackDefaultNodePoolService) CreateResource(resourceData *schema.Reso
 						},
 						"taints": {
 							ConvertType: bp.ConvertJsonArray,
+						},
+						"name_prefix": {
+							ConvertType: bp.ConvertJsonObject,
 						},
 					},
 				},
@@ -340,6 +327,9 @@ func (s *VestackDefaultNodePoolService) ModifyResource(resourceData *schema.Reso
 								},
 							},
 						},
+						"pre_script": {
+							ConvertType: bp.ConvertJsonObject,
+						},
 						"initialize_script": {
 							ConvertType: bp.ConvertJsonObject,
 						},
@@ -364,6 +354,9 @@ func (s *VestackDefaultNodePoolService) ModifyResource(resourceData *schema.Reso
 							ForceGet:    true,
 						},
 						"cordon": {
+							ConvertType: bp.ConvertJsonObject,
+						},
+						"name_prefix": {
 							ConvertType: bp.ConvertJsonObject,
 						},
 					},
@@ -434,8 +427,9 @@ func (s *VestackDefaultNodePoolService) RemoveResource(resourceData *schema.Reso
 			ConvertMode: bp.RequestConvertIgnore,
 			ContentType: bp.ContentTypeJson,
 			SdkParam: &map[string]interface{}{
-				"Id":        resourceData.Id(),
-				"ClusterId": resourceData.Get("cluster_id"),
+				"Id":              resourceData.Id(),
+				"ClusterId":       resourceData.Get("cluster_id"),
+				"RetainResources": []string{"Ecs"},
 			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)

@@ -12,12 +12,6 @@ const testAccVpcIpv6GatewayCreate = `
 	data "vestack_zones" "foo"{
 	}
 
-	data "vestack_images" "foo" {
-	  os_type = "Linux"
-	  visibility = "public"
-	  instance_type_id = "ecs.g1.large"
-	}
-
 	resource "vestack_vpc" "foo" {
 	  vpc_name   = "acc-test-vpc"
 	  cidr_block = "172.16.0.0/16"
@@ -46,12 +40,6 @@ const testAccVpcIpv6GatewayCreate = `
 
 const testAccVpcIpv6GatewayUpdate = `
 	data "vestack_zones" "foo"{
-	}
-
-	data "vestack_images" "foo" {
-	  os_type = "Linux"
-	  visibility = "public"
-	  instance_type_id = "ecs.g1.large"
 	}
 
 	resource "vestack_vpc" "foo" {

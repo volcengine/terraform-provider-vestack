@@ -62,7 +62,7 @@ func ResourceVestackNodePool() *schema.Resource {
 				ConflictsWith: []string{"auto_scaling"},
 				Description: "The list of existing ECS instance ids. Add existing instances with same type of security group under the same cluster VPC to the custom node pool.\n" +
 					"Note that removing instance ids from the list will only remove the nodes from cluster and not release the ECS instances. But deleting node pool will release the ECS instances in it.\n" +
-					"It is not recommended to use this field, it is recommended to use `volcengine_vke_node` resource to add an existing instance to a custom node pool.",
+					"It is not recommended to use this field, it is recommended to use `vestack_vke_node` resource to add an existing instance to a custom node pool.",
 			},
 			"keep_instance_name": {
 				Type:     schema.TypeBool,
@@ -70,6 +70,52 @@ func ResourceVestackNodePool() *schema.Resource {
 				Default:  false,
 				Description: "Whether to keep instance name when adding an existing instance to a custom node pool, the value is `true` or `false`.\n" +
 					"This field is valid only when adding new instances to the custom node pool.",
+			},
+			"management": {
+				Type:        schema.TypeList,
+				MaxItems:    1,
+				Optional:    true,
+				Computed:    true,
+				Description: "The Management Config of NodePool.",
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"enabled": {
+							Type:        schema.TypeBool,
+							Optional:    true,
+							Default:     false,
+							Description: "Whether to enable the management function of the node pool. Default is `false`.",
+						},
+						"remedy_config": {
+							Type:     schema.TypeList,
+							MaxItems: 1,
+							Optional: true,
+							Computed: true,
+							DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+								return !d.Get("management.0.enabled").(bool)
+							},
+							Description: "The Remedy Config of NodePool. This field is valid when the value of `enabled` is `true`.",
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"enabled": {
+										Type:        schema.TypeBool,
+										Optional:    true,
+										Default:     false,
+										Description: "Whether to enable the remedy function of the node pool. Default is `false`.",
+									},
+									"id": {
+										Type:     schema.TypeString,
+										Optional: true,
+										Computed: true,
+										DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+											return !d.Get("management.0.remedy_config.0.enabled").(bool)
+										},
+										Description: "The ID of the remedy policy. This field is valid when the value of `enabled` is `true`.",
+									},
+								},
+							},
+						},
+					},
+				},
 			},
 			"auto_scaling": {
 				Type:          schema.TypeList,
@@ -83,20 +129,20 @@ func ResourceVestackNodePool() *schema.Resource {
 							Type:        schema.TypeBool,
 							Optional:    true,
 							Computed:    true,
-							Description: "Is Enabled of AutoScaling.",
+							Description: "Whether to enable the auto scaling function of the node pool. When a node needs to be manually added to the node pool, the value of this field must be `false`.",
 						},
 						"max_replicas": {
 							Type:         schema.TypeInt,
 							Optional:     true,
 							Default:      10,
 							ValidateFunc: validation.IntBetween(1, 2000),
-							Description:  "The MaxReplicas of AutoScaling, default 10, range in 1~2000.",
+							Description:  "The MaxReplicas of AutoScaling, default 10, range in 1~2000. This field is valid when the value of `enabled` is `true`.",
 						},
 						"min_replicas": {
 							Type:        schema.TypeInt,
 							Optional:    true,
 							Computed:    true,
-							Description: "The MinReplicas of AutoScaling, default 0.",
+							Description: "The MinReplicas of AutoScaling, default 0. This field is valid when the value of `enabled` is `true`.",
 						},
 						"desired_replicas": {
 							Type:        schema.TypeInt,
@@ -109,7 +155,7 @@ func ResourceVestackNodePool() *schema.Resource {
 							Optional:     true,
 							Computed:     true,
 							ValidateFunc: validation.IntBetween(0, 100),
-							Description:  "The Priority of AutoScaling, default 10, rang in 0~100.",
+							Description:  "The Priority of AutoScaling, default 10, rang in 0~100. This field is valid when the value of `enabled` is `true` and the value of `subnet_policy` is `Priority`.",
 						},
 						"subnet_policy": {
 							Type:     schema.TypeString,
@@ -138,7 +184,7 @@ func ResourceVestackNodePool() *schema.Resource {
 							Elem: &schema.Schema{
 								Type: schema.TypeString,
 							},
-							Description: "The InstanceTypeIds of NodeConfig.",
+							Description: "The InstanceTypeIds of NodeConfig. The value can get from vestack_vke_support_resource_types datasource.",
 						},
 						"subnet_ids": {
 							Type:     schema.TypeList,
@@ -243,6 +289,11 @@ func ResourceVestackNodePool() *schema.Resource {
 								},
 							},
 							Description: "The DataVolumes of NodeConfig.",
+						},
+						"pre_script": {
+							Type:        schema.TypeString,
+							Optional:    true,
+							Description: "The PreScript of NodeConfig.",
 						},
 						"initialize_script": {
 							Type:        schema.TypeString,

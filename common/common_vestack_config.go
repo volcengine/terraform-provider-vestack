@@ -3,35 +3,54 @@ package common
 import (
 	"context"
 	"fmt"
-	"github.com/volcengine/terraform-provider-vestack/logger"
-	"github.com/volcengine/volcengine-go-sdk/volcengine"
 	"net/http"
 	"net/url"
 
 	"github.com/volcengine/volcengine-go-sdk/service/autoscaling"
 	"github.com/volcengine/volcengine-go-sdk/service/clb"
 	"github.com/volcengine/volcengine-go-sdk/service/ecs"
+	"github.com/volcengine/volcengine-go-sdk/service/iam"
 	"github.com/volcengine/volcengine-go-sdk/service/natgateway"
 	"github.com/volcengine/volcengine-go-sdk/service/rdsmysql"
 	"github.com/volcengine/volcengine-go-sdk/service/rdsmysqlv2"
 	"github.com/volcengine/volcengine-go-sdk/service/storageebs"
 	"github.com/volcengine/volcengine-go-sdk/service/vpc"
 	"github.com/volcengine/volcengine-go-sdk/service/vpn"
+	"github.com/volcengine/volcengine-go-sdk/volcengine"
 	"github.com/volcengine/volcengine-go-sdk/volcengine/credentials"
 	"github.com/volcengine/volcengine-go-sdk/volcengine/session"
 	"github.com/volcengine/volcengine-go-sdk/volcengine/volcengineutil"
 )
 
 type Config struct {
-	AccessKey         string
-	SecretKey         string
-	SessionToken      string
-	Region            string
-	Endpoint          string
-	DisableSSL        bool
-	CustomerHeaders   map[string]string
-	CustomerEndpoints map[string]string
-	ProxyUrl          string
+	AccessKey                string
+	SecretKey                string
+	SessionToken             string
+	Region                   string
+	Endpoint                 string
+	DisableSSL               bool
+	EnableStandardEndpoint   bool
+	CustomerHeaders          map[string]string
+	CustomerEndpoints        map[string]string
+	CustomerEndpointSuffix   map[string]string
+	ProxyUrl                 string
+	AssumeRoleConfig         *AssumeRoleConfig
+	AssumeRoleWithOidcConfig *AssumeRoleWithOidcConfig
+}
+
+type AssumeRoleConfig struct {
+	AssumeRoleTrn         string
+	AssumeRoleSessionName string
+	Policy                string
+	DurationSeconds       int
+}
+
+type AssumeRoleWithOidcConfig struct {
+	AssumeRoleWithOidcTrn         string
+	AssumeRoleWithOidcSessionName string
+	OidcToken                     string
+	Policy                        string
+	DurationSeconds               int
 }
 
 func (c *Config) Client() (*SdkClient, error) {
@@ -51,12 +70,6 @@ func (c *Config) Client() (*SdkClient, error) {
 			}
 		}).
 		WithEndpoint(volcengineutil.NewEndpoint().WithCustomerEndpoint(c.Endpoint).GetEndpoint())
-	logger.Info("AccessKey: %+v", c.AccessKey)
-	logger.Info("SecretKey: %+v", c.SecretKey)
-	logger.Info("Region: %+v", c.Region)
-	logger.Info("CustomerHeaders: %+v", c.CustomerHeaders)
-	logger.Info("SessionToken: %+v", c.SessionToken)
-	logger.Info("Endpoint: %+v", c.Endpoint)
 
 	if c.ProxyUrl != "" {
 		u, _ := url.Parse(c.ProxyUrl)
@@ -82,8 +95,9 @@ func (c *Config) Client() (*SdkClient, error) {
 	client.AutoScalingClient = autoscaling.New(sess)
 	client.RdsClient = rdsmysql.New(sess)
 	client.RdsClientV2 = rdsmysqlv2.New(sess)
-	client.UniversalClient = NewUniversalClient(sess, c.CustomerEndpoints)
-	client.BypassSvcClient = NewBypassClient(sess, c.CustomerEndpoints)
+	client.IamClient = iam.New(sess)
+	client.UniversalClient = NewUniversalClient(sess, c.CustomerEndpoints, c.EnableStandardEndpoint)
+	client.BypassSvcClient = NewBypassClient(sess, c.CustomerEndpointSuffix)
 
 	//InitLocks()
 	//InitSyncLimit()
@@ -92,5 +106,5 @@ func (c *Config) Client() (*SdkClient, error) {
 
 func init() {
 	InitLocks()
-	InitSyncLimit()
+	//InitSyncLimit()
 }

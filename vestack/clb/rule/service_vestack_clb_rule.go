@@ -8,22 +8,22 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	ve "github.com/volcengine/terraform-provider-vestack/common"
+	bp "github.com/volcengine/terraform-provider-vestack/common"
 	"github.com/volcengine/terraform-provider-vestack/logger"
 	"github.com/volcengine/terraform-provider-vestack/vestack/clb/clb"
 )
 
 type VestackRuleService struct {
-	Client *ve.SdkClient
+	Client *bp.SdkClient
 }
 
-func NewRuleService(c *ve.SdkClient) *VestackRuleService {
+func NewRuleService(c *bp.SdkClient) *VestackRuleService {
 	return &VestackRuleService{
 		Client: c,
 	}
 }
 
-func (s *VestackRuleService) GetClient() *ve.SdkClient {
+func (s *VestackRuleService) GetClient() *bp.SdkClient {
 	return s.Client
 }
 
@@ -33,7 +33,7 @@ func (s *VestackRuleService) ReadResources(condition map[string]interface{}) (da
 		results interface{}
 		ok      bool
 	)
-	return ve.WithSimpleQuery(condition, func(m map[string]interface{}) ([]interface{}, error) {
+	return bp.WithSimpleQuery(condition, func(m map[string]interface{}) ([]interface{}, error) {
 		action := "DescribeRules"
 		logger.Debug(logger.ReqFormat, action, condition)
 		// 检查 RuleIds 是否存在
@@ -67,7 +67,7 @@ func (s *VestackRuleService) ReadResources(condition map[string]interface{}) (da
 				return data, err
 			}
 		}
-		results, err = ve.ObtainSdkValue("Result.Rules", *resp)
+		results, err = bp.ObtainSdkValue("Result.Rules", *resp)
 		if err != nil {
 			return data, err
 		}
@@ -131,27 +131,53 @@ func (s *VestackRuleService) RefreshResourceState(resourceData *schema.ResourceD
 	}
 }
 
-func (VestackRuleService) WithResourceResponseHandlers(rule map[string]interface{}) []ve.ResourceResponseHandler {
-	handler := func() (map[string]interface{}, map[string]ve.ResponseConvert, error) {
+func (VestackRuleService) WithResourceResponseHandlers(rule map[string]interface{}) []bp.ResourceResponseHandler {
+	handler := func() (map[string]interface{}, map[string]bp.ResponseConvert, error) {
 		return rule, nil, nil
 	}
-	return []ve.ResourceResponseHandler{handler}
+	return []bp.ResourceResponseHandler{handler}
 }
 
-func (s *VestackRuleService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []ve.Callback {
-	// 查询 LoadBalancerId
-	clbId, err := s.queryLoadBalancerId(resourceData.Get("server_group_id").(string))
-	if err != nil {
-		return []ve.Callback{{
-			Err: err,
-		}}
+func (s *VestackRuleService) CreateResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
+	var clbId string
+	var err error
+
+	// 验证action_type和server_group_id的组合
+	actionType := resourceData.Get("action_type").(string)
+	if actionType == "" {
+		actionType = "Forward"
 	}
 
-	callback := ve.Callback{
-		Call: ve.SdkCall{
+	if actionType == "Forward" {
+		serverGroupId := resourceData.Get("server_group_id").(string)
+		if serverGroupId == "" {
+			return []bp.Callback{{
+				Err: fmt.Errorf("server_group_id is required when action_type is Forward"),
+			}}
+		}
+
+		// 查询 LoadBalancerId
+		clbId, err = s.queryLoadBalancerId(serverGroupId)
+		if err != nil {
+			return []bp.Callback{{
+				Err: err,
+			}}
+		}
+	} else {
+		// 对于Redirect类型，使用 listener_id 查询 LoadBalancerId，在规则创建期间，需要锁定 clb
+		clbId, err = s.queryLoadBalancerIdByListenerId(resourceData.Get("listener_id").(string))
+		if err != nil {
+			return []bp.Callback{{
+				Err: err,
+			}}
+		}
+	}
+
+	callback := bp.Callback{
+		Call: bp.SdkCall{
 			Action:      "CreateRules",
-			ConvertMode: ve.RequestConvertAll,
-			Convert: map[string]ve.RequestConvert{
+			ConvertMode: bp.RequestConvertAll,
+			Convert: map[string]bp.RequestConvert{
 				"domain": {
 					TargetField: "Rules.1.Domain",
 				},
@@ -164,17 +190,60 @@ func (s *VestackRuleService) CreateResource(resourceData *schema.ResourceData, r
 				"description": {
 					TargetField: "Rules.1.Description",
 				},
+				"action_type": {
+					TargetField: "Rules.1.ActionType",
+				},
+				"tags": {
+					TargetField: "Rules.1.Tags",
+					ConvertType: bp.ConvertListN,
+				},
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
+			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+				actionType := d.Get("action_type").(string)
+				if actionType == "" {
+					actionType = "Forward"
+				}
+
+				// 如果是重定向类型，添加重定向配置
+				if actionType == "Redirect" {
+					if redirectConfig, ok := d.GetOk("redirect_config"); ok {
+						configs := redirectConfig.([]interface{})
+						if len(configs) > 0 && configs[0] != nil {
+							config := configs[0].(map[string]interface{})
+
+							if protocol, ok := config["protocol"].(string); ok && protocol != "" {
+								(*call.SdkParam)["Rules.1.RedirectConfig.Protocol"] = protocol
+							}
+							if host, ok := config["host"].(string); ok && host != "" {
+								(*call.SdkParam)["Rules.1.RedirectConfig.Host"] = host
+							}
+							if path, ok := config["path"].(string); ok && path != "" {
+								(*call.SdkParam)["Rules.1.RedirectConfig.Path"] = path
+							}
+							if port, ok := config["port"].(string); ok && port != "" {
+								(*call.SdkParam)["Rules.1.RedirectConfig.Port"] = port
+							}
+							if statusCode, ok := config["status_code"].(string); ok && statusCode != "" {
+								(*call.SdkParam)["Rules.1.RedirectConfig.StatusCode"] = statusCode
+							}
+						}
+					} else {
+						return false, fmt.Errorf("redirect_config is required when action_type is Redirect")
+					}
+				}
+
+				return true, nil
+			},
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
-			AfterCall: func(d *schema.ResourceData, client *ve.SdkClient, resp *map[string]interface{}, call ve.SdkCall) error {
-				ids, _ := ve.ObtainSdkValue("Result.RuleIds", *resp)
+			AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
+				ids, _ := bp.ObtainSdkValue("Result.RuleIds", *resp)
 				d.SetId(ids.([]interface{})[0].(string))
 				return nil
 			},
-			ExtraRefresh: map[ve.ResourceService]*ve.StateRefresh{
+			ExtraRefresh: map[bp.ResourceService]*bp.StateRefresh{
 				clb.NewClbService(s.Client): {
 					Target:     []string{"Active", "Inactive"},
 					Timeout:    resourceData.Timeout(schema.TimeoutCreate),
@@ -186,40 +255,102 @@ func (s *VestackRuleService) CreateResource(resourceData *schema.ResourceData, r
 			},
 		},
 	}
-	return []ve.Callback{callback}
+	return []bp.Callback{callback}
 }
 
-func (s *VestackRuleService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []ve.Callback {
-	// 查询 LoadBalancerId
-	clbId, err := s.queryLoadBalancerId(resourceData.Get("server_group_id").(string))
-	if err != nil {
-		return []ve.Callback{{
-			Err: err,
-		}}
+func (s *VestackRuleService) ModifyResource(resourceData *schema.ResourceData, resource *schema.Resource) []bp.Callback {
+	var callbacks []bp.Callback
+	var clbId string
+	var err error
+
+	actionType := resourceData.Get("action_type").(string)
+	if actionType == "" {
+		actionType = "Forward"
 	}
 
-	callback := ve.Callback{
-		Call: ve.SdkCall{
+	if actionType == "Forward" {
+		serverGroupId := resourceData.Get("server_group_id").(string)
+		if serverGroupId == "" {
+			return []bp.Callback{{
+				Err: fmt.Errorf("server_group_id is required when action_type is Forward"),
+			}}
+		}
+
+		// 查询 LoadBalancerId
+		clbId, err = s.queryLoadBalancerId(serverGroupId)
+		if err != nil {
+			return []bp.Callback{{
+				Err: err,
+			}}
+		}
+	} else {
+		// 对于Redirect类型，使用 listener_id 查询 Load	BalancerId，在规则修改期间，需要锁定 clb
+		clbId, err = s.queryLoadBalancerIdByListenerId(resourceData.Get("listener_id").(string))
+		if err != nil {
+			return []bp.Callback{{
+				Err: err,
+			}}
+		}
+	}
+
+	callback := bp.Callback{
+		Call: bp.SdkCall{
 			Action:      "ModifyRules",
-			ConvertMode: ve.RequestConvertAll,
-			Convert: map[string]ve.RequestConvert{
+			ConvertMode: bp.RequestConvertAll,
+			Convert: map[string]bp.RequestConvert{
+				"listener_id": {
+					TargetField: "ListenerId",
+					ForceGet:    true,
+				},
 				"server_group_id": {
 					TargetField: "Rules.1.ServerGroupId",
 				},
 				"description": {
 					TargetField: "Rules.1.Description",
 				},
+				"action_type": {
+					TargetField: "Rules.1.ActionType",
+				},
 			},
-			BeforeCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (bool, error) {
+			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
 				(*call.SdkParam)["Rules.1.RuleId"] = d.Id()
-				(*call.SdkParam)["ListenerId"] = d.Get("listener_id")
+				actionType := d.Get("action_type").(string)
+
+				// 如果是重定向类型，添加重定向配置
+				if actionType == "Redirect" {
+					if redirectConfig, ok := d.GetOk("redirect_config"); ok {
+						configs := redirectConfig.([]interface{})
+						if len(configs) > 0 && configs[0] != nil {
+							config := configs[0].(map[string]interface{})
+
+							if protocol, ok := config["protocol"].(string); ok && protocol != "" {
+								(*call.SdkParam)["Rules.1.RedirectConfig.Protocol"] = protocol
+							}
+							if host, ok := config["host"].(string); ok && host != "" {
+								(*call.SdkParam)["Rules.1.RedirectConfig.Host"] = host
+							}
+							if path, ok := config["path"].(string); ok && path != "" {
+								(*call.SdkParam)["Rules.1.RedirectConfig.Path"] = path
+							}
+							if port, ok := config["port"].(string); ok && port != "" {
+								(*call.SdkParam)["Rules.1.RedirectConfig.Port"] = port
+							}
+							if statusCode, ok := config["status_code"].(string); ok && statusCode != "" {
+								(*call.SdkParam)["Rules.1.RedirectConfig.StatusCode"] = statusCode
+							}
+						}
+					} else {
+						return false, fmt.Errorf("redirect_config is required when action_type is Redirect")
+					}
+				}
+
 				return true, nil
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
-			ExtraRefresh: map[ve.ResourceService]*ve.StateRefresh{
+			ExtraRefresh: map[bp.ResourceService]*bp.StateRefresh{
 				clb.NewClbService(s.Client): {
 					Target:     []string{"Active", "Inactive"},
 					Timeout:    resourceData.Timeout(schema.TimeoutCreate),
@@ -231,35 +362,63 @@ func (s *VestackRuleService) ModifyResource(resourceData *schema.ResourceData, r
 			},
 		},
 	}
-	return []ve.Callback{callback}
+	callbacks = append(callbacks, callback)
+
+	// 更新 Tags
+	setResourceTagsCallbacks := bp.SetResourceTags(s.Client, "TagResources", "UntagResources", "rule", resourceData, getUniversalInfo)
+	callbacks = append(callbacks, setResourceTagsCallbacks...)
+
+	return callbacks
 }
 
-func (s *VestackRuleService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []ve.Callback {
-	// 查询 LoadBalancerId
-	clbId, err := s.queryLoadBalancerId(resourceData.Get("server_group_id").(string))
-	if err != nil {
-		return []ve.Callback{{
-			Err: err,
-		}}
+func (s *VestackRuleService) RemoveResource(resourceData *schema.ResourceData, r *schema.Resource) []bp.Callback {
+	var clbId string
+	var err error
+
+	actionType := resourceData.Get("action_type").(string)
+	if actionType == "" {
+		actionType = "Forward"
 	}
 
-	callback := ve.Callback{
-		Call: ve.SdkCall{
+	// 查询 LoadBalancerId
+	if actionType == "Forward" {
+		clbId, err = s.queryLoadBalancerId(resourceData.Get("server_group_id").(string))
+		if err != nil {
+			return []bp.Callback{
+				{
+					Err: err,
+				},
+			}
+		}
+	} else {
+		// 对于Redirect类型，使用 listener_id 查询 LoadBalancerId
+		clbId, err = s.queryLoadBalancerIdByListenerId(resourceData.Get("listener_id").(string))
+		if err != nil {
+			return []bp.Callback{
+				{
+					Err: err,
+				},
+			}
+		}
+	}
+
+	callback := bp.Callback{
+		Call: bp.SdkCall{
 			Action:      "DeleteRules",
-			ConvertMode: ve.RequestConvertIgnore,
+			ConvertMode: bp.RequestConvertIgnore,
 			SdkParam: &map[string]interface{}{
 				"RuleIds.1":  resourceData.Id(),
 				"ListenerId": resourceData.Get("listener_id"),
 			},
-			ExecuteCall: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall) (*map[string]interface{}, error) {
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.RespFormat, call.Action, call.SdkParam)
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
-			CallError: func(d *schema.ResourceData, client *ve.SdkClient, call ve.SdkCall, baseErr error) error {
+			CallError: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall, baseErr error) error {
 				return resource.Retry(15*time.Minute, func() *resource.RetryError {
 					_, callErr := s.ReadResource(d, "")
 					if callErr != nil {
-						if ve.ResourceNotFoundError(callErr) {
+						if bp.ResourceNotFoundError(callErr) {
 							return nil
 						} else {
 							return resource.NonRetryableError(fmt.Errorf("error on  reading vpc on delete %q, %w", d.Id(), callErr))
@@ -272,7 +431,7 @@ func (s *VestackRuleService) RemoveResource(resourceData *schema.ResourceData, r
 					return resource.RetryableError(callErr)
 				})
 			},
-			ExtraRefresh: map[ve.ResourceService]*ve.StateRefresh{
+			ExtraRefresh: map[bp.ResourceService]*bp.StateRefresh{
 				clb.NewClbService(s.Client): {
 					Target:     []string{"Active", "Inactive"},
 					Timeout:    resourceData.Timeout(schema.TimeoutCreate),
@@ -284,19 +443,28 @@ func (s *VestackRuleService) RemoveResource(resourceData *schema.ResourceData, r
 			},
 		},
 	}
-	return []ve.Callback{callback}
+	return []bp.Callback{callback}
 }
 
-func (s *VestackRuleService) DatasourceResources(*schema.ResourceData, *schema.Resource) ve.DataSourceInfo {
-	return ve.DataSourceInfo{
-		RequestConverts: map[string]ve.RequestConvert{
+func (s *VestackRuleService) DatasourceResources(*schema.ResourceData, *schema.Resource) bp.DataSourceInfo {
+	return bp.DataSourceInfo{
+		RequestConverts: map[string]bp.RequestConvert{
 			"ids": {
 				TargetField: "RuleIds",
+			},
+			"tags": {
+				TargetField: "TagFilters",
+				ConvertType: bp.ConvertListN,
+				NextLevelConvert: map[string]bp.RequestConvert{
+					"value": {
+						TargetField: "Values.1",
+					},
+				},
 			},
 		},
 		IdField:      "RuleId",
 		CollectField: "rules",
-		ResponseConverts: map[string]ve.ResponseConvert{
+		ResponseConverts: map[string]bp.ResponseConvert{
 			"RuleId": {
 				TargetField: "id",
 				KeepDefault: true,
@@ -318,19 +486,36 @@ func (s *VestackRuleService) queryLoadBalancerId(serverGroupId string) (string, 
 	if err != nil {
 		return "", err
 	}
-	clbId, err := ve.ObtainSdkValue("Result.LoadBalancerId", *serverGroupResp)
+	clbId, err := bp.ObtainSdkValue("Result.LoadBalancerId", *serverGroupResp)
 	if err != nil {
 		return "", err
 	}
 	return clbId.(string), nil
 }
 
-func getUniversalInfo(actionName string) ve.UniversalInfo {
-	return ve.UniversalInfo{
+func (s *VestackRuleService) queryLoadBalancerIdByListenerId(listenerId string) (string, error) {
+	// 使用 listener_id 查询 LoadBalancerId
+	// 原因：当 action_type 为 Redirect 时，server_group_id 不再是 Required 参数，而 listener_id 是唯一的
+	action := "DescribeListenerAttributes"
+	listenerResp, err := s.Client.UniversalClient.DoCall(getUniversalInfo(action), &map[string]interface{}{
+		"ListenerId": listenerId,
+	})
+	if err != nil {
+		return "", err
+	}
+	clbId, err := bp.ObtainSdkValue("Result.LoadBalancerId", *listenerResp)
+	if err != nil {
+		return "", err
+	}
+	return clbId.(string), nil
+}
+
+func getUniversalInfo(actionName string) bp.UniversalInfo {
+	return bp.UniversalInfo{
 		ServiceName: "clb",
 		Version:     "2020-04-01",
-		HttpMethod:  ve.GET,
-		ContentType: ve.Default,
+		HttpMethod:  bp.GET,
+		ContentType: bp.Default,
 		Action:      actionName,
 	}
 }

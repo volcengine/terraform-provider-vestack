@@ -1,9 +1,9 @@
 package iam_role
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
@@ -65,23 +65,29 @@ func (s *VestackIamRoleService) ReadResources(m map[string]interface{}) (data []
 
 func (s *VestackIamRoleService) ReadResource(resourceData *schema.ResourceData, roleId string) (data map[string]interface{}, err error) {
 	var (
-		results []interface{}
-		ok      bool
+		result interface{}
+		ok     bool
 	)
 	if roleId == "" {
 		roleId = s.ReadResourceId(resourceData.Id())
 	}
-	req := map[string]interface{}{
+	condition := map[string]interface{}{
 		"RoleName": roleId,
 	}
-	results, err = s.ReadResources(req)
+	action := "GetRole"
+	logger.Debug(logger.ReqFormat, action, condition)
+	resp, err := s.Client.UniversalClient.DoCall(getUniversalInfo(action), &condition)
 	if err != nil {
 		return data, err
 	}
-	for _, v := range results {
-		if data, ok = v.(map[string]interface{}); !ok {
-			return data, errors.New("value is not map")
-		}
+	logger.Debug(logger.RespFormat, action, condition, *resp)
+
+	result, err = bp.ObtainSdkValue("Result.Role", *resp)
+	if err != nil {
+		return data, err
+	}
+	if data, ok = result.(map[string]interface{}); !ok {
+		return data, errors.New("value is not map")
 	}
 	if len(data) == 0 {
 		return data, fmt.Errorf("Role %s not exist ", roleId)
@@ -98,20 +104,6 @@ func (s *VestackIamRoleService) WithResourceResponseHandlers(role map[string]int
 		role["Id"] = role["RoleName"]
 		return role, nil, nil
 	}
-
-	logger.Debug(logger.ReqFormat, "role", role)
-	if trustPolicyDocument, ok := role["TrustPolicyDocument"]; ok {
-		// 将 map 类型数据转换为 JSON 字符串
-		trustPolicyDocBytes, err := json.Marshal(trustPolicyDocument)
-		logger.Info(fmt.Sprintf("dataSourceVestackIamRolesRead trust_policy_document:%+v", trustPolicyDocument))
-		if err != nil {
-			logger.Info("error on WithResourceResponseHandlers,marshal failed, %q, %w", role["Id"], err)
-			return nil
-		}
-		trustPolicyDocField := string(trustPolicyDocBytes)
-		// 设置字段值
-		role["TrustPolicyDocument"] = trustPolicyDocField
-	}
 	return []bp.ResourceResponseHandler{handler}
 }
 
@@ -120,6 +112,12 @@ func (s *VestackIamRoleService) CreateResource(data *schema.ResourceData, resour
 		Call: bp.SdkCall{
 			Action:      "CreateRole",
 			ConvertMode: bp.RequestConvertAll,
+			Convert: map[string]bp.RequestConvert{
+				"tags": {
+					TargetField: "Tags",
+					ConvertType: bp.ConvertListN,
+				},
+			},
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
@@ -129,7 +127,9 @@ func (s *VestackIamRoleService) CreateResource(data *schema.ResourceData, resour
 				if err != nil {
 					return err
 				}
-				d.SetId(roleName.(string))
+				if nameStr, ok := roleName.(string); ok && nameStr != "" {
+					d.SetId(nameStr)
+				}
 				return nil
 			},
 		},
@@ -141,18 +141,38 @@ func (s *VestackIamRoleService) ModifyResource(data *schema.ResourceData, resour
 	updateRoleCallback := bp.Callback{
 		Call: bp.SdkCall{
 			Action:      "UpdateRole",
-			ConvertMode: bp.RequestConvertAll,
-			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
-				(*call.SdkParam)["RoleName"] = d.Get("role_name")
-				return true, nil
+			ConvertMode: bp.RequestConvertInConvert,
+			Convert: map[string]bp.RequestConvert{
+				"role_name": {
+					TargetField: "NewRoleName",
+					ConvertType: bp.ConvertDefault,
+				},
+				"display_name": {
+					TargetField: "NewDisplayName",
+					ConvertType: bp.ConvertDefault,
+				},
+				"description": {
+					TargetField: "NewDescription",
+					ConvertType: bp.ConvertDefault,
+				},
+				"max_session_duration": {
+					TargetField: "MaxSessionDuration",
+					ConvertType: bp.ConvertDefault,
+				},
+				"tags": {
+					Ignore: true,
+				},
 			},
+			RequestIdField: "RoleName",
 			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
 		},
 	}
-	return []bp.Callback{updateRoleCallback}
+	callbacks := []bp.Callback{updateRoleCallback}
+	setResourceTagsCallbacks := s.setResourceTags(data, "Role", callbacks)
+	return setResourceTagsCallbacks
 }
 
 func (s *VestackIamRoleService) RemoveResource(data *schema.ResourceData, r *schema.Resource) []bp.Callback {
@@ -193,10 +213,44 @@ func (s *VestackIamRoleService) RemoveResource(data *schema.ResourceData, r *sch
 
 func (s *VestackIamRoleService) DatasourceResources(data *schema.ResourceData, resource *schema.Resource) bp.DataSourceInfo {
 	return bp.DataSourceInfo{
+		RequestConverts: map[string]bp.RequestConvert{
+			"query": {
+				TargetField: "Query",
+			},
+		},
 		ResponseConverts: map[string]bp.ResponseConvert{
 			"RoleName": {
-				TargetField: "id",
-				KeepDefault: true,
+				TargetField: "role_name",
+			},
+			"RoleId": {
+				TargetField: "role_id",
+			},
+			"IsServiceLinkedRole": {
+				TargetField: "is_service_linked_role",
+			},
+			"DisplayName": {
+				TargetField: "display_name",
+			},
+			"MaxSessionDuration": {
+				TargetField: "max_session_duration",
+			},
+			"Tags": {
+				TargetField: "tags",
+			},
+			"Trn": {
+				TargetField: "trn",
+			},
+			"Description": {
+				TargetField: "description",
+			},
+			"TrustPolicyDocument": {
+				TargetField: "trust_policy_document",
+			},
+			"CreateDate": {
+				TargetField: "create_date",
+			},
+			"UpdateDate": {
+				TargetField: "update_date",
 			},
 		},
 		NameField:    "RoleName",
@@ -212,8 +266,83 @@ func (s *VestackIamRoleService) ReadResourceId(id string) string {
 func getUniversalInfo(actionName string) bp.UniversalInfo {
 	return bp.UniversalInfo{
 		ServiceName: "iam",
+		Action:      actionName,
 		Version:     "2018-01-01",
 		HttpMethod:  bp.GET,
-		Action:      actionName,
+		ContentType: bp.Default,
+		RegionType:  bp.Global,
 	}
+}
+
+func (s *VestackIamRoleService) setResourceTags(resourceData *schema.ResourceData, resourceType string, callbacks []bp.Callback) []bp.Callback {
+	addedTags, removedTags, _, _ := bp.GetSetDifference("tags", resourceData, bp.TagsHash, false)
+
+	removeCallback := bp.Callback{
+		Call: bp.SdkCall{
+			Action:      "UntagResources",
+			ConvertMode: bp.RequestConvertIgnore,
+			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+				if removedTags != nil && len(removedTags.List()) > 0 {
+					(*call.SdkParam)["ResourceNames.1"] = resourceData.Id()
+					(*call.SdkParam)["ResourceType"] = resourceType
+					for index, tag := range removedTags.List() {
+						tm, ok := tag.(map[string]interface{})
+						if !ok {
+							return false, errors.New("tag item is not map")
+						}
+						key, ok := tm["key"].(string)
+						if !ok {
+							return false, errors.New("tag key is not string")
+						}
+						(*call.SdkParam)["TagKeys."+strconv.Itoa(index+1)] = key
+					}
+					return true, nil
+				}
+				return false, nil
+			},
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
+			},
+		},
+	}
+	callbacks = append(callbacks, removeCallback)
+
+	addCallback := bp.Callback{
+		Call: bp.SdkCall{
+			Action:      "TagResources",
+			ConvertMode: bp.RequestConvertIgnore,
+			BeforeCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (bool, error) {
+				if addedTags != nil && len(addedTags.List()) > 0 {
+					(*call.SdkParam)["ResourceNames.1"] = resourceData.Id()
+					(*call.SdkParam)["ResourceType"] = resourceType
+					for index, tag := range addedTags.List() {
+						tm, ok := tag.(map[string]interface{})
+						if !ok {
+							return false, errors.New("tag item is not map")
+						}
+						key, ok := tm["key"].(string)
+						if !ok {
+							return false, errors.New("tag key is not string")
+						}
+						value, ok := tm["value"].(string)
+						if !ok {
+							return false, errors.New("tag value is not string")
+						}
+						(*call.SdkParam)["Tags."+strconv.Itoa(index+1)+".Key"] = key
+						(*call.SdkParam)["Tags."+strconv.Itoa(index+1)+".Value"] = value
+					}
+					return true, nil
+				}
+				return false, nil
+			},
+			ExecuteCall: func(d *schema.ResourceData, client *bp.SdkClient, call bp.SdkCall) (*map[string]interface{}, error) {
+				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
+				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
+			},
+		},
+	}
+	callbacks = append(callbacks, addCallback)
+
+	return callbacks
 }

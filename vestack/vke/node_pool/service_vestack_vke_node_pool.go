@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	bp "github.com/volcengine/terraform-provider-vestack/common"
@@ -208,6 +208,16 @@ func (s *VestackNodePoolService) ReadResource(resourceData *schema.ResourceData,
 		delete(result["NodeConfig"].(map[string]interface{}), "Tags")
 	}
 
+	if v, exist := result["Management"]; exist {
+		if managementMap, ok := v.(map[string]interface{}); ok {
+			if remedyConfig, ok := managementMap["RemedyConfig"]; ok {
+				if remedyConfigMap, ok := remedyConfig.(map[string]interface{}); ok {
+					managementMap["RemedyConfig"] = []interface{}{remedyConfigMap}
+				}
+			}
+		}
+	}
+
 	logger.Debug(logger.RespFormat, "result of ReadResource ", result)
 	return result, err
 }
@@ -350,6 +360,9 @@ func (s *VestackNodePoolService) CreateResource(resourceData *schema.ResourceDat
 						"data_volumes": {
 							Ignore: true,
 						},
+						"pre_script": {
+							ConvertType: bp.ConvertJsonObject,
+						},
 						"initialize_script": {
 							ConvertType: bp.ConvertJsonObject,
 						},
@@ -442,6 +455,27 @@ func (s *VestackNodePoolService) CreateResource(resourceData *schema.ResourceDat
 						},
 						"subnet_policy": {
 							TargetField: "SubnetPolicy",
+						},
+					},
+				},
+				"management": {
+					ConvertType: bp.ConvertJsonObject,
+					NextLevelConvert: map[string]bp.RequestConvert{
+						"enabled": {
+							TargetField: "Enabled",
+							ForceGet:    true,
+						},
+						"remedy_config": {
+							ConvertType: bp.ConvertJsonObject,
+							NextLevelConvert: map[string]bp.RequestConvert{
+								"enabled": {
+									TargetField: "Enabled",
+									ForceGet:    true,
+								},
+								"id": {
+									TargetField: "Id",
+								},
+							},
 						},
 					},
 				},
@@ -540,8 +574,8 @@ func (s *VestackNodePoolService) CreateResource(resourceData *schema.ResourceDat
 				logger.Debug(logger.ReqFormat, call.Action, call.SdkParam)
 				return s.Client.UniversalClient.DoCall(getUniversalInfo(call.Action), call.SdkParam)
 			},
-			//AfterCall: func(d *schema.ResourceData, client *ve.SdkClient, resp *map[string]interface{}, call ve.SdkCall) error {
-			//	tmpIds, _ := ve.ObtainSdkValue("Result.Ids", *resp)
+			//AfterCall: func(d *schema.ResourceData, client *bp.SdkClient, resp *map[string]interface{}, call bp.SdkCall) error {
+			//	tmpIds, _ := bp.ObtainSdkValue("Result.Ids", *resp)
 			//	ids := tmpIds.([]interface{})
 			//	d.Set("node_ids", ids)
 			//	return nil
@@ -609,6 +643,9 @@ func (s *VestackNodePoolService) ModifyResource(resourceData *schema.ResourceDat
 						"additional_container_storage_enabled": {
 							ConvertType: bp.ConvertJsonObject,
 						},
+						"pre_script": {
+							ConvertType: bp.ConvertJsonObject,
+						},
 						"initialize_script": {
 							ConvertType: bp.ConvertJsonObject,
 						},
@@ -660,34 +697,47 @@ func (s *VestackNodePoolService) ModifyResource(resourceData *schema.ResourceDat
 						"cordon": {
 							ConvertType: bp.ConvertJsonObject,
 						},
+						"name_prefix": {
+							ConvertType: bp.ConvertJsonObject,
+						},
+						"auto_sync_disabled": {
+							ConvertType: bp.ConvertJsonObject,
+						},
+						"kubelet_config": {
+							ConvertType: bp.ConvertJsonObject,
+							NextLevelConvert: map[string]bp.RequestConvert{
+								"feature_gates": {
+									ConvertType: bp.ConvertJsonObject,
+									NextLevelConvert: map[string]bp.RequestConvert{
+										"qos_resource_manager": {
+											TargetField: "QoSResourceManager",
+											ConvertType: bp.ConvertJsonObject,
+											ForceGet:    true,
+										},
+									},
+								},
+							},
+						},
 					},
 				},
-				"auto_scaling": {
+				"management": {
 					ConvertType: bp.ConvertJsonObject,
 					NextLevelConvert: map[string]bp.RequestConvert{
 						"enabled": {
-							ForceGet:    true,
 							TargetField: "Enabled",
-						},
-						"max_replicas": {
 							ForceGet:    true,
-							TargetField: "MaxReplicas",
 						},
-						"min_replicas": {
-							ForceGet:    true,
-							TargetField: "MinReplicas",
-						},
-						"desired_replicas": {
-							ForceGet:    true,
-							TargetField: "DesiredReplicas",
-						},
-						"priority": {
-							ForceGet:    true,
-							TargetField: "Priority",
-						},
-						"subnet_policy": {
-							ForceGet:    true,
-							TargetField: "SubnetPolicy",
+						"remedy_config": {
+							ConvertType: bp.ConvertJsonObject,
+							NextLevelConvert: map[string]bp.RequestConvert{
+								"enabled": {
+									TargetField: "Enabled",
+									ForceGet:    true,
+								},
+								"id": {
+									TargetField: "Id",
+								},
+							},
 						},
 					},
 				},
@@ -867,7 +917,7 @@ func (s *VestackNodePoolService) ModifyResource(resourceData *schema.ResourceDat
 						return fmt.Errorf("NodeStatistics is not map ")
 					}
 					if int(nodes["TotalCount"].(float64)) != d.Get("auto_scaling.0.desired_replicas").(int) {
-						return fmt.Errorf("The number of nodes in node_pool %s is inconsistent. Suggest obtaining more detailed error message through the Volcengine console. ", d.Id())
+						return fmt.Errorf("The number of nodes in node_pool %s is inconsistent. Suggest obtaining more detailed error message through the Vestack console. ", d.Id())
 					}
 					return nil
 				},
@@ -1049,6 +1099,9 @@ func (s *VestackNodePoolService) DatasourceResources(*schema.ResourceData, *sche
 					}
 					return results
 				},
+			},
+			"NodeConfig.PreScript": {
+				TargetField: "pre_script",
 			},
 			"NodeConfig.InitializeScript": {
 				TargetField: "initialize_script",
